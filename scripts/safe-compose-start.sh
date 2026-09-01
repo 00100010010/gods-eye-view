@@ -4,9 +4,9 @@ set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lock_path=/run/lock/vps-heavy-operation.lock
 sample_seconds=5
-max_load_one=2
+max_load_one=3
 max_steal=10
-min_idle=60
+min_idle=50
 max_busy=60
 max_iowait=25
 min_available_mib=4096
