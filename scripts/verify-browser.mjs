@@ -71,6 +71,49 @@ try {
     Boolean(window.__godsEyeView?.mapStackController?.getActiveId?.())
     && document.querySelector('#loading-screen')?.classList.contains('hidden')
   ), { timeout: 45_000 });
+
+  const simplifiedUi = await page.evaluate(() => {
+    const retiredSelectors = [
+      '#title-bar',
+      '#style-indicator',
+      '#share-btn',
+      '#scope-toggle',
+      '#bloom-toggle',
+      '#scene-panel',
+      '.style-btn',
+    ];
+    const present = retiredSelectors.filter((selector) => document.querySelector(selector));
+    const clearButton = document.querySelector('#clear-selected-layers');
+    return {
+      present,
+      clearInsideDataPanel: Boolean(clearButton?.closest('#data-panel')),
+    };
+  });
+
+  const trackpadBefore = await page.evaluate(() => {
+    const viewer = window.__godsEyeView?.viewer;
+    return viewer ? { heading: viewer.camera.heading, pitch: viewer.camera.pitch } : null;
+  });
+  const globeCanvas = await page.$('.cesium-widget canvas');
+  const globeBox = await globeCanvas?.boundingBox();
+  if (globeBox) {
+    await page.mouse.move(globeBox.x + globeBox.width / 2, globeBox.y + globeBox.height / 2);
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel({ deltaX: 80, deltaY: 40 });
+    await page.keyboard.up('Shift');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const trackpadAfter = await page.evaluate(() => {
+    const viewer = window.__godsEyeView?.viewer;
+    return viewer ? { heading: viewer.camera.heading, pitch: viewer.camera.pitch } : null;
+  });
+  const trackpadOrientation = {
+    available: Boolean(trackpadBefore && trackpadAfter && globeBox),
+    headingChanged: Boolean(trackpadBefore && trackpadAfter
+      && Math.abs(trackpadAfter.heading - trackpadBefore.heading) > 0.001),
+    pitchChanged: Boolean(trackpadBefore && trackpadAfter
+      && Math.abs(trackpadAfter.pitch - trackpadBefore.pitch) > 0.001),
+  };
   // Upstream now starts keyless sessions on Esri imagery and keeps OSM as its
   // automatic fallback. Select OSM explicitly so this production check still
   // validates the real volunteer tile server request and its browser Referer.
@@ -92,10 +135,24 @@ try {
   }));
   const session = (await page.cookies()).find((cookie) => cookie.name === '__Host-gev_session');
   const sessionHardened = Boolean(session?.httpOnly && session?.secure && session?.sameSite === 'Strict');
-  console.log(JSON.stringify({ status: response?.status(), login, sessionHardened, runtime, osm, pageErrors }, null, 2));
+  console.log(JSON.stringify({
+    status: response?.status(),
+    login,
+    sessionHardened,
+    runtime,
+    simplifiedUi,
+    trackpadOrientation,
+    osm,
+    pageErrors,
+  }, null, 2));
   if (response?.status() !== 200
       || !sessionHardened
       || pageErrors.length
+      || simplifiedUi.present.length
+      || !simplifiedUi.clearInsideDataPanel
+      || !trackpadOrientation.available
+      || !trackpadOrientation.headingChanged
+      || !trackpadOrientation.pitchChanged
       || runtime.activeStack !== 'osm'
       || !runtime.loadingHidden
       || osm.status !== 200

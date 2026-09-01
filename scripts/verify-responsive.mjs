@@ -129,7 +129,7 @@ try {
     let commandDockActions = null;
     if (device.name === 'phone-portrait') {
       await page.setGeolocation({ latitude: 48.8584, longitude: 2.2945, accuracy: 25 });
-      await page.click('#location-bar .location-toolbar');
+      await page.click('#mobile-command-nav [data-mobile-panel="location-bar"]');
       await page.waitForFunction(() => !document.querySelector('#location-bar')?.classList.contains('collapsed'));
       await waitForHitTarget(page, '#locate-me');
       await page.click('#locate-me');
@@ -147,10 +147,12 @@ try {
       await page.click('#location-bar .dock-tray-close');
       await page.waitForFunction(() => document.querySelector('#location-bar')?.classList.contains('collapsed'));
 
-      await page.click('#control-panel-toggle');
+      await page.click('#mobile-more-toggle');
+      await page.waitForFunction(() => !document.querySelector('#mobile-more-menu')?.hidden);
+      await page.click('#mobile-more-menu [data-mobile-panel="control-panel"]');
       await page.waitForFunction(() => !document.querySelector('#control-panel')?.classList.contains('collapsed'));
       await waitForHitTarget(page, '#control-panel .dock-tray-close');
-      const presetsClose = await page.$eval(
+      const mapSourcesClose = await page.$eval(
         '#control-panel .dock-tray-close',
         (element) => {
           const rect = element.getBoundingClientRect();
@@ -159,7 +161,7 @@ try {
       );
       await page.click('#control-panel .dock-tray-close');
       await page.waitForFunction(() => document.querySelector('#control-panel')?.classList.contains('collapsed'));
-      commandDockActions = { locationClose, presetsClose, geolocationCentered: true };
+      commandDockActions = { locationClose, mapSourcesClose, geolocationCentered: true };
     }
 
     const layout = await page.evaluate(() => {
@@ -183,9 +185,7 @@ try {
 
       const overlaps = (a, b) => Boolean(a && b
         && a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y);
-      const title = rectFor('#title-bar');
       const actions = rectFor('#top-center-actions');
-      const style = rectFor('#style-indicator');
       const leftRail = rectFor('#left-panel-stack');
       const rightRail = rectFor('#right-context-rail');
       const dock = rectFor('#command-dock');
@@ -218,13 +218,10 @@ try {
           width: document.documentElement.scrollWidth,
           height: document.documentElement.scrollHeight,
         },
-        title,
         actions,
-        style,
         leftRail,
         rightRail,
         dock,
-        topCollision: overlaps(title, actions) || overlaps(actions, style) || overlaps(title, style),
         railCollision: overlaps(leftRail, rightRail),
         smallControls,
       };
@@ -237,7 +234,7 @@ try {
     });
 
     if (device.name === 'phone-portrait') {
-      await page.click('#data-panel .panel-collapse-btn');
+      await page.click('#mobile-command-nav [data-mobile-panel="data-panel"]');
       await page.waitForFunction(() => !document.querySelector('#data-panel')?.classList.contains('collapsed'));
       await new Promise((resolve) => setTimeout(resolve, 350));
       layout.expandedPanel = await page.evaluate(() => {
@@ -265,14 +262,13 @@ try {
     if (response?.status() !== 200) failures.push(`HTTP ${response?.status()}`);
     if (pageErrors.length) failures.push(`${pageErrors.length} page error(s)`);
     if (layout.document.width > layout.viewport.width) failures.push('horizontal overflow');
-    if (layout.topCollision) failures.push('top-bar collision');
     if (layout.railCollision) failures.push('panel-rail collision');
     if (layout.smallControls.length) failures.push(`${layout.smallControls.length} touch target(s) below 40px`);
     if (layout.commandDockActions) {
-      const { locationClose, presetsClose, geolocationCentered } = layout.commandDockActions;
+      const { locationClose, mapSourcesClose, geolocationCentered } = layout.commandDockActions;
       if (!geolocationCentered) failures.push('device geolocation did not center the map');
       if (locationClose.width < 40 || locationClose.height < 40) failures.push('LOCATION close target below 40px');
-      if (presetsClose.width < 40 || presetsClose.height < 40) failures.push('PRESETS close target below 40px');
+      if (mapSourcesClose.width < 40 || mapSourcesClose.height < 40) failures.push('MAP SOURCES close target below 40px');
     }
     if (layout.expandedPanel) {
       const panel = layout.expandedPanel;
