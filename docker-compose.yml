@@ -1,0 +1,97 @@
+name: gods_eye_view
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gods-eye-view:local
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      GEV_REQUIRE_AUTH: "1"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m,uid=1000,gid=1000,mode=1770
+      - /app/.gev-logs:rw,nosuid,nodev,noexec,size=32m,uid=1000,gid=1000,mode=0750
+      - /app/node_modules/.vite-temp:rw,nosuid,nodev,noexec,size=32m,uid=1000,gid=1000,mode=0750
+    volumes:
+      - gods_eye_view_cache:/app/.gev-cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 1g
+    mem_reservation: 256m
+    memswap_limit: 1536m
+    cpus: "0.50"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4173/logo.svg').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=ingress_gods_eye_view
+
+      - traefik.http.services.gods-eye-view.loadbalancer.server.port=4173
+
+      - traefik.http.middlewares.gods-eye-view-login-rate.ratelimit.average=5
+      - traefik.http.middlewares.gods-eye-view-login-rate.ratelimit.period=1s
+      - traefik.http.middlewares.gods-eye-view-login-rate.ratelimit.burst=5
+      - traefik.http.middlewares.gods-eye-view-api-rate.ratelimit.average=20
+      - traefik.http.middlewares.gods-eye-view-api-rate.ratelimit.period=1s
+      - traefik.http.middlewares.gods-eye-view-api-rate.ratelimit.burst=30
+
+      - traefik.http.routers.gods-eye-view-login.rule=Host(`${GEV_HOSTNAME:-godseyeview.jimtrebes.fr}`) && Path(`/auth/login`)
+      - traefik.http.routers.gods-eye-view-login.priority=400
+      - traefik.http.routers.gods-eye-view-login.entrypoints=web,websecure
+      - traefik.http.routers.gods-eye-view-login.tls=true
+      - traefik.http.routers.gods-eye-view-login.tls.certresolver=mytlschallenge
+      - traefik.http.routers.gods-eye-view-login.middlewares=gods-eye-view-login-rate
+      - traefik.http.routers.gods-eye-view-login.service=gods-eye-view
+
+      - traefik.http.routers.gods-eye-view-assets.rule=Host(`${GEV_HOSTNAME:-godseyeview.jimtrebes.fr}`) && (Path(`/logo.svg`) || Path(`/manifest.webmanifest`) || Path(`/icons/apple-touch-icon.png`) || Path(`/icons/icon-192.png`) || Path(`/icons/icon-512.png`) || Path(`/icons/icon-maskable-512.png`))
+      - traefik.http.routers.gods-eye-view-assets.priority=300
+      - traefik.http.routers.gods-eye-view-assets.entrypoints=web,websecure
+      - traefik.http.routers.gods-eye-view-assets.tls=true
+      - traefik.http.routers.gods-eye-view-assets.tls.certresolver=mytlschallenge
+      - traefik.http.routers.gods-eye-view-assets.service=gods-eye-view
+
+      - traefik.http.routers.gods-eye-view-api.rule=Host(`${GEV_HOSTNAME:-godseyeview.jimtrebes.fr}`) && PathPrefix(`/api/`)
+      - traefik.http.routers.gods-eye-view-api.priority=200
+      - traefik.http.routers.gods-eye-view-api.entrypoints=web,websecure
+      - traefik.http.routers.gods-eye-view-api.tls=true
+      - traefik.http.routers.gods-eye-view-api.tls.certresolver=mytlschallenge
+      - traefik.http.routers.gods-eye-view-api.middlewares=gods-eye-view-api-rate
+      - traefik.http.routers.gods-eye-view-api.service=gods-eye-view
+
+      - traefik.http.routers.gods-eye-view.rule=Host(`${GEV_HOSTNAME:-godseyeview.jimtrebes.fr}`)
+      - traefik.http.routers.gods-eye-view.priority=100
+      - traefik.http.routers.gods-eye-view.entrypoints=web,websecure
+      - traefik.http.routers.gods-eye-view.tls=true
+      - traefik.http.routers.gods-eye-view.tls.certresolver=mytlschallenge
+      - traefik.http.routers.gods-eye-view.service=gods-eye-view
+    networks:
+      - ingress
+
+volumes:
+  gods_eye_view_cache:
+
+networks:
+  ingress:
+    external: true
+    name: ingress_gods_eye_view

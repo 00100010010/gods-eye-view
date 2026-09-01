@@ -14,11 +14,13 @@ import {
   PLACE_ANCHOR_OFFSET_RATIO,
   flyToGlobeView,
   flyToPresetLocation,
+  flyToUserLocation,
   geocodeNavigationMode,
   regionFramingPlan,
   REGION_SWATH_SPAN_KM,
   GLOBE_VIEW,
   searchAndFlyTo,
+  userLocationCameraRange,
 } from './locations.js';
 
 function stubViewer() {
@@ -69,6 +71,26 @@ async function runSearch(viewer, options, { result = AUSTIN_RESULT, query = 'aus
     else delete globalThis.window;
   }
 }
+
+test('device-location framing validates coordinates and scales with reported accuracy', () => {
+  assert.equal(userLocationCameraRange(null), 800);
+  assert.equal(userLocationCameraRange(25), 800);
+  assert.equal(userLocationCameraRange(400), 1600);
+  assert.equal(userLocationCameraRange(5000), 5000);
+
+  const viewer = stubViewer();
+  const flight = flyToUserLocation(viewer, {
+    latitude: 48.8584,
+    longitude: 2.2945,
+    accuracyM: 400,
+  });
+  assert.ok(flight?.targetPosition);
+  assert.equal(flight.range, 1600);
+  assert.equal(viewer.flights.length, 1);
+
+  assert.equal(flyToUserLocation(viewer, { latitude: 91, longitude: 2 }), null);
+  assert.equal(viewer.flights.length, 1, 'invalid coordinates must not move the camera');
+});
 
 /** Read a recorded viewport flight back as a degrees rectangle. */
 function flownRectangleDegrees(viewer, index = 0) {

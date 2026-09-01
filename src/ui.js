@@ -12,7 +12,17 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
-import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
+import {
+  LOCATIONS,
+  CITY_POIS,
+  GLOBE_VIEW,
+  flyToGlobeView,
+  flyToPresetLocation,
+  flyToPOI,
+  flyToUserLocation,
+  searchAndFlyTo,
+} from './locations.js';
+import { requestUserLocation, userLocationErrorMessage } from './browserLocation.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import {
@@ -2368,6 +2378,7 @@ export class StyleManager {
     this._toast = document.getElementById('toast');
     this._locationSearch = document.getElementById('location-search');
     this._searchToggle = document.getElementById('search-toggle');
+    this._locateMeBtn = document.getElementById('locate-me');
     this._locationPills = document.getElementById('location-pills');
     this._poiRow = document.getElementById('poi-row');
     this._locationBarDivider = document.getElementById('location-bar-divider');
@@ -2808,6 +2819,11 @@ export class StyleManager {
     this._locationSearch?.classList.remove('searching', 'expanded');
     if (this._locationSearch) this._locationSearch.value = '';
     this._locationSearch?.blur();
+    this._locateMeBtn?.classList.remove('locating');
+    if (this._locateMeBtn) {
+      this._locateMeBtn.disabled = false;
+      this._locateMeBtn.setAttribute('aria-busy', 'false');
+    }
   }
 
   /** Release every follow owner while preserving Contact and vessel selection. */
@@ -3972,6 +3988,15 @@ export class StyleManager {
         event.stopPropagation();
         const panelId = button.dataset.pinTarget;
         this._setCommandDockPanelPinState(panelId);
+      });
+    });
+    document.querySelectorAll('.dock-tray-close[data-dock-close-target]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const panelId = button.dataset.dockCloseTarget;
+        if (!panelId) return;
+        this._setCommandDockPanelPinState(panelId, false, { syncShare: false });
+        this.setPanelCollapsed(panelId, true, { explicit: true });
       });
     });
   }
@@ -9293,6 +9318,45 @@ export class StyleManager {
       this._locationSearch.classList.toggle('expanded');
       if (this._locationSearch.classList.contains('expanded')) {
         this._locationSearch.focus();
+      }
+    });
+
+    // Device location is a separate, explicit action so opening the text search
+    // never triggers a surprise permission prompt. Coordinates remain local to
+    // the browser and go straight to the Cesium camera.
+    this._locateMeBtn?.addEventListener('click', async () => {
+      const generation = this._beginDeferredNavigation('location');
+      if (generation === false) return;
+      this._activeLocationSearchGeneration = generation;
+      this._locateMeBtn.disabled = true;
+      this._locateMeBtn.classList.add('locating');
+      this._locateMeBtn.setAttribute('aria-busy', 'true');
+
+      try {
+        const position = await requestUserLocation();
+        if (this._disposed || generation !== this._navigationGeneration) return;
+        if (!this._reassertNavigationHandoff(generation)) return;
+        const destination = flyToUserLocation(this.viewer, position);
+        if (!destination) {
+          throw Object.assign(new Error('Invalid device location'), { code: 'invalid-position' });
+        }
+
+        this._searchedLocationLabel = 'My location, Device GPS';
+        this._setActiveLocation(null);
+        this._currentTarget = destination.targetPosition;
+        this._currentPoi = null;
+        this._collapsePOIRow();
+        this._updateLocationMiniStatus();
+        const accuracy = position.accuracyM;
+        this._showToast(Number.isFinite(accuracy)
+          ? `Current location found · ±${Math.round(accuracy)} m`
+          : 'Current location found');
+      } catch (error) {
+        if (this._disposed || generation !== this._navigationGeneration) return;
+        console.warn('[Location] Device geolocation failed:', error?.message || error);
+        this._showToast(userLocationErrorMessage(error));
+      } finally {
+        this._settleLocationSearchUi(generation);
       }
     });
 

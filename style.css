@@ -1842,6 +1842,37 @@ body.ui-clean-view #scene-runtime.active {
   border-color: var(--glass-border-hover);
 }
 
+.locate-me-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.locate-me-btn:hover,
+.locate-me-btn:focus-visible {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.locate-me-btn:disabled { cursor: wait; opacity: 0.72; }
+.locate-me-btn img { width: 16px; height: 16px; }
+.locate-me-btn.locating img { animation: locate-me-pulse 900ms ease-in-out infinite alternate; }
+
+@keyframes locate-me-pulse {
+  to { opacity: 0.35; transform: scale(0.82); }
+}
+
 #location-search {
   width: 0;
   padding: 0;
@@ -1897,6 +1928,10 @@ body.ui-clean-view #scene-runtime.active {
   cursor: pointer;
   transition: all var(--transition-fast);
   outline: none;
+}
+
+#top-center-actions #logout-form {
+  display: contents;
 }
 
 #top-center-actions button:hover,
@@ -7399,7 +7434,7 @@ body.recording-mode #cesium-credits {
 }
 
 #command-dock .location-search-wrap {
-  flex: 0 0 10.5rem;
+  flex: 0 0 12.5rem;
   min-width: 0;
   padding-right: 0.4rem;
 }
@@ -7407,6 +7442,12 @@ body.recording-mode #cesium-credits {
 #command-dock .search-toggle-btn {
   width: 1.75rem;
   height: 1.75rem;
+}
+
+#command-dock .locate-me-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
 }
 
 #command-dock #location-search,
@@ -7674,7 +7715,7 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   }
 
   #command-dock .location-search-wrap {
-    flex-basis: 8.5rem;
+    flex-basis: 11.5rem;
   }
 }
 
@@ -8456,6 +8497,39 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 #command-dock .dock-pin-btn img {
   width: 1.15rem;
   height: 1.15rem;
+}
+
+#command-dock .dock-tray-close {
+  position: absolute;
+  top: -1rem;
+  left: -1rem;
+  z-index: 3;
+  display: none;
+  place-items: center;
+  width: 2.05rem;
+  min-width: 2.05rem;
+  height: 2.05rem;
+  margin: 0;
+  padding: 0;
+  color: rgba(190, 221, 230, 0.82);
+  background: rgba(8, 24, 34, 0.96);
+  border: 1px solid rgba(123, 189, 211, 0.35);
+  border-radius: 50%;
+  box-shadow: 0 0.35rem 0.9rem rgba(0, 0, 0, 0.5);
+  font: 500 1rem/1 var(--font-sans);
+  cursor: pointer;
+}
+
+#command-dock #location-bar:not(.collapsed) .dock-tray-close,
+#command-dock #control-panel:not(.collapsed) .dock-tray-close {
+  display: grid;
+}
+
+#command-dock .dock-tray-close:hover,
+#command-dock .dock-tray-close:focus-visible {
+  color: var(--accent);
+  border-color: rgba(0, 212, 255, 0.62);
+  outline: none;
 }
 
 /* Five-pixel standby baseline; live microphone analysis sets --audio-level. */
@@ -9516,4 +9590,469 @@ body.scene-playback-mode #key-setup {
   color: rgba(255, 190, 170, 1);
   border-color: rgba(255, 170, 150, 0.65);
   outline: none;
+}
+
+/* ── Touch-responsive workspace ─────────────────────────────────────────────
+   Phones and tablets need a map-first layout, not scaled-down desktop rails.
+   The 1024px band keeps both tablet rails in separate half-width corridors;
+   the 720px band turns their collapsed panels into compact launchers and any
+   expanded panel into one scrollable sheet above the command dock. */
+@media (max-width: 1024px) {
+  :root {
+    --left-stack-x: 16px;
+    --right-rail-x: 16px;
+  }
+
+  #title-bar {
+    top: max(16px, env(safe-area-inset-top));
+    left: max(16px, env(safe-area-inset-left));
+  }
+
+  #title-bar h1 {
+    gap: 8px;
+    font-size: 18px;
+    letter-spacing: 4px;
+  }
+
+  #title-bar .title-logo { width: 42px; }
+  #title-bar .subtitle { margin-top: 4px; font-size: 8px; letter-spacing: 2px; }
+
+  #style-indicator {
+    top: max(20px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+  }
+
+  #style-indicator .indicator-label { font-size: 8px; letter-spacing: 1.5px; }
+  #style-indicator .indicator-value { font-size: 13px; letter-spacing: 2.5px; }
+
+  #top-center-actions {
+    top: max(12px, env(safe-area-inset-top));
+    gap: 7px;
+  }
+
+  #top-center-actions button {
+    width: 44px;
+    height: 44px;
+  }
+
+  #global-loading-status { top: max(66px, calc(env(safe-area-inset-top) + 54px)); }
+
+  #left-panel-stack {
+    top: max(var(--touch-rail-top, 96px), calc(env(safe-area-inset-top) + 82px));
+    bottom: max(108px, calc(env(safe-area-inset-bottom) + 96px));
+    left: max(16px, env(safe-area-inset-left));
+    width: min(340px, calc(50vw - 24px));
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  #right-context-rail {
+    top: max(var(--touch-rail-top, 96px), calc(env(safe-area-inset-top) + 82px));
+    right: max(16px, env(safe-area-inset-right));
+    width: min(340px, calc(50vw - 24px));
+    max-height: calc(100dvh - var(--touch-rail-top, 96px) - 108px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  #left-panel-stack > #data-panel:not(.collapsed),
+  #left-panel-stack > #cctv-panel:not(.collapsed),
+  #left-panel-stack > #scene-panel:not(.collapsed),
+  #right-context-rail > #pp-toggles:not(.collapsed),
+  #right-context-rail > #cctv-panel:not(.collapsed),
+  #right-context-rail > #global-context-panel:not(.collapsed) {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .panel-collapse-btn,
+  #pp-toggles > .pp-header-row .pp-collapse-btn,
+  .context-radio-toggle,
+  .context-radio-mini button,
+  #view-switcher button,
+  .search-toggle-btn,
+  .locate-me-btn,
+  .dock-tray-close,
+  .dock-pin-btn {
+    min-width: 44px;
+    width: 44px;
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .data-toggle-btn,
+  .scene-btn,
+  .panel-layer-toggle,
+  .context-mode-button,
+  .map-stack-chip,
+  .location-pill,
+  .poi-pill,
+  .pp-toggle-btn,
+  select,
+  input[type='text'] {
+    min-height: 44px;
+  }
+
+  #command-dock .touch-scroll-surface {
+    max-height: min(64dvh, 34rem);
+    padding-top: 3.4rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  #command-dock .dock-popover-content .style-btn { min-height: 52px; }
+  #command-dock .dock-pin-btn {
+    top: 0.4rem;
+    right: 0.5rem;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+  #command-dock .dock-tray-close {
+    top: 0.4rem;
+    left: 0.5rem;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+  #command-dock .panel-header,
+  #command-dock .location-toolbar,
+  #command-dock #control-panel.collapsed .panel-header { min-height: 44px; }
+  #command-dock .gev-voice-cost { display: none; }
+
+  #view-switcher {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(92px, calc(env(safe-area-inset-bottom) + 82px));
+  }
+
+  /* Tablet telemetry stays readable without occupying the map's center. */
+  #intel-hud .hud-content { font-size: 11px; letter-spacing: 1.2px; }
+  #intel-hud .hud-top-left,
+  #intel-hud .hud-bottom-left { left: 16px; }
+  #intel-hud .hud-top-right,
+  #intel-hud .hud-bottom-right { right: 16px; }
+
+  #first-run-launcher { width: min(36rem, calc(100vw - 2rem)); }
+  .first-run-choices button { min-height: 3.75rem; }
+  .first-run-suppress { min-height: 44px; }
+  .first-run-suppress input { width: 22px; height: 22px; }
+}
+
+@media (max-width: 720px) {
+  :root { --panel-radius: 12px; }
+
+  /* Keep a recognizable brand mark while freeing the top bar for 44px actions. */
+  #title-bar {
+    top: max(10px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+  }
+
+  #title-bar h1 > span:last-child,
+  #title-bar .subtitle,
+  #style-indicator .indicator-label { display: none; }
+  #title-bar .title-logo { width: 42px; }
+
+  #style-indicator {
+    top: max(18px, calc(env(safe-area-inset-top) + 8px));
+    right: max(10px, env(safe-area-inset-right));
+    max-width: 78px;
+    padding: 5px 7px;
+    overflow: hidden;
+    background: rgba(7, 17, 25, 0.68);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #style-indicator .indicator-value {
+    margin: 0;
+    overflow: hidden;
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    text-overflow: ellipsis;
+  }
+
+  #top-center-actions { top: max(8px, env(safe-area-inset-top)); }
+
+  #left-panel-stack,
+  #right-context-rail {
+    top: max(var(--touch-rail-top, 68px), calc(env(safe-area-inset-top) + 58px));
+    width: min(11rem, calc(50vw - 16px));
+    gap: 6px;
+  }
+
+  #left-panel-stack {
+    bottom: max(98px, calc(env(safe-area-inset-bottom) + 88px));
+    left: max(10px, env(safe-area-inset-left));
+  }
+  #right-context-rail {
+    left: auto;
+    right: max(10px, env(safe-area-inset-right));
+    max-height: none;
+  }
+
+  #left-panel-stack > #data-panel.collapsed,
+  #left-panel-stack > #cctv-panel.collapsed,
+  #left-panel-stack > #scene-panel.collapsed,
+  #right-context-rail > #pp-toggles.collapsed,
+  #right-context-rail > #cctv-panel.collapsed,
+  #right-context-rail > #global-context-panel.collapsed {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #data-panel.collapsed .data-panel-inner,
+  #cctv-panel.collapsed .cctv-panel-inner,
+  #scene-panel.collapsed .scene-panel-inner,
+  #right-context-rail #global-context-panel.collapsed .global-context-panel-inner,
+  #right-context-rail #pp-toggles.collapsed .pp-header-row {
+    box-sizing: border-box;
+    height: 48px;
+    min-height: 48px;
+    padding: 2px 5px 2px 10px;
+  }
+
+  #data-panel.collapsed .panel-header,
+  #cctv-panel.collapsed .panel-header,
+  #scene-panel.collapsed .panel-header,
+  #global-context-panel.collapsed .panel-header {
+    min-height: 44px;
+    margin: 0;
+    padding: 0;
+    gap: 6px;
+  }
+
+  #left-panel-stack .collapsed .panel-divider,
+  #right-context-rail .collapsed .panel-divider { min-width: 4px; }
+  #global-context-panel.collapsed #context-radio-dock { display: none; }
+
+  /* One expanded tool becomes a map sheet; compact siblings get out of its way. */
+  #left-panel-stack:has(> [data-panel-id]:not(.collapsed)) {
+    right: max(10px, env(safe-area-inset-right));
+    width: auto;
+    overflow: hidden;
+  }
+
+  #left-panel-stack:has(> [data-panel-id]:not(.collapsed)) > [data-panel-id].collapsed {
+    display: none;
+  }
+
+  #left-panel-stack > #data-panel:not(.collapsed),
+  #left-panel-stack > #cctv-panel:not(.collapsed),
+  #left-panel-stack > #scene-panel:not(.collapsed) {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  #left-panel-stack > #data-panel:not(.collapsed) .data-panel-inner,
+  #left-panel-stack > #cctv-panel:not(.collapsed) .cctv-panel-inner,
+  #left-panel-stack > #scene-panel:not(.collapsed) .scene-panel-inner {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  #right-context-rail:has(> #pp-toggles:not(.collapsed), > [data-panel-id]:not(.collapsed)) {
+    left: max(10px, env(safe-area-inset-left));
+    width: auto;
+    overflow: hidden;
+  }
+
+  #right-context-rail:has(> #pp-toggles:not(.collapsed), > [data-panel-id]:not(.collapsed)) > .collapsed {
+    display: none;
+  }
+
+  body:has(#left-panel-stack > [data-panel-id]:not(.collapsed)) #right-context-rail,
+  body:has(#right-context-rail > #pp-toggles:not(.collapsed)) #left-panel-stack,
+  body:has(#right-context-rail > [data-panel-id]:not(.collapsed)) #left-panel-stack {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #right-context-rail > #pp-toggles:not(.collapsed),
+  #right-context-rail > #cctv-panel:not(.collapsed),
+  #right-context-rail > #global-context-panel:not(.collapsed) {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  #right-context-rail > #pp-toggles:not(.collapsed),
+  #right-context-rail > #cctv-panel:not(.collapsed) .cctv-panel-inner,
+  #right-context-rail > #global-context-panel:not(.collapsed) .global-context-panel-inner {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  #command-dock {
+    --dock-side-compact: clamp(4.25rem, 21vw, 5.25rem);
+    --dock-voice-width: clamp(8.5rem, 38vw, 9.25rem);
+    max-width: calc(100vw - 12px);
+    min-height: 4.25rem;
+  }
+
+  /* Preserve the attribution-tested 8px dock anchor. Moving its three visible
+     children upward is conservative for credit clearance and clears iOS's home
+     indicator without changing the measured dock/tray geometry contract. */
+  #command-dock > #location-bar,
+  #command-dock > #control-panel,
+  #command-dock > #gev-voice-control {
+    transform: translateY(calc(0px - env(safe-area-inset-bottom)));
+  }
+
+  #command-dock .panel-inner,
+  #command-dock .location-inner,
+  #command-dock #control-panel.collapsed .panel-inner,
+  #command-dock #location-bar.collapsed .location-inner {
+    padding: 7px 8px;
+  }
+
+  #command-dock .panel-title,
+  #command-dock .location-toolbar-label {
+    max-width: none;
+    font-size: 0;
+    letter-spacing: 0.07rem;
+  }
+
+  #command-dock .location-toolbar-label::after {
+    content: 'LOCATE';
+    position: static;
+    display: inline;
+    float: none;
+    height: auto;
+    margin: 0;
+    background: none;
+    font-size: 0.52rem;
+  }
+
+  #command-dock #control-panel .panel-title::after {
+    content: 'PRESETS';
+    position: static;
+    display: inline;
+    float: none;
+    height: auto;
+    margin: 0;
+    background: none;
+    font-size: 0.52rem;
+  }
+
+  #command-dock .panel-header,
+  #command-dock .location-toolbar,
+  #command-dock #control-panel.collapsed .panel-header {
+    min-height: 44px;
+    margin: 0;
+  }
+
+  #command-dock > #gev-voice-control {
+    min-height: 4.5rem;
+    margin: -0.2rem 0;
+    padding: 0.45rem 0.35rem;
+  }
+
+  #command-dock #gev-voice-button {
+    min-width: 56px;
+    width: 56px;
+    min-height: 56px;
+    height: 56px;
+  }
+
+  #command-dock .gev-mic-orbit { width: 48px; height: 48px; }
+  #command-dock .gev-voice-kicker,
+  #command-dock .gev-voice-readout,
+  #command-dock .gev-voice-visualizer { display: none; }
+
+  #command-dock .touch-scroll-surface {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 190px);
+  }
+
+  #command-dock #location-bar .dock-popover-content {
+    left: calc((var(--dock-unified-width) - (100vw - 20px)) / 2);
+  }
+
+  #command-dock #control-panel .dock-popover-content {
+    right: calc((var(--dock-unified-width) - (100vw - 20px)) / 2);
+  }
+
+  #view-switcher {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(90px, calc(env(safe-area-inset-bottom) + 80px));
+  }
+
+  /* Telemetry that fits desktop corners becomes visual noise over a phone map. */
+  body:not(.cockpit-mode) #intel-hud.active :is(
+    .hud-corner,
+    .hud-top-bar,
+    .hud-bottom-bar,
+    .hud-edge
+  ) { display: none !important; }
+
+  #first-run-launcher {
+    top: max(68px, calc(env(safe-area-inset-top) + 58px));
+    bottom: auto;
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 170px);
+    padding: 0.85rem;
+    transform: translate(-50%, 0.6rem) scale(0.985);
+  }
+
+  #first-run-launcher.visible { transform: translate(-50%, 0) scale(1); }
+  #first-run-launcher h2 { font-size: 1.15rem; }
+  .first-run-choices button { min-height: 3.5rem; }
+  .first-run-choices strong { font-size: 0.7rem; }
+  .first-run-footer { margin-top: 0.55rem; }
+  .first-run-suppress { min-height: 40px; }
+}
+
+/* A landscape phone is wide like a tablet but only a few hundred pixels tall. */
+@media (max-width: 900px) and (max-height: 600px) {
+  :root { --touch-rail-top: 58px; }
+
+  #title-bar h1 > span:last-child,
+  #title-bar .subtitle,
+  #style-indicator .indicator-label { display: none; }
+  #title-bar { top: max(7px, env(safe-area-inset-top)); }
+  #title-bar .title-logo { width: 36px; }
+  #style-indicator { top: max(12px, env(safe-area-inset-top)); }
+  #top-center-actions { top: max(6px, env(safe-area-inset-top)); }
+
+  #left-panel-stack {
+    bottom: max(82px, calc(env(safe-area-inset-bottom) + 74px));
+    max-height: none;
+  }
+
+  body:not(.cockpit-mode) #intel-hud.active :is(
+    .hud-corner,
+    .hud-top-bar,
+    .hud-bottom-bar,
+    .hud-edge
+  ) { display: none !important; }
+
+  #first-run-launcher {
+    top: max(54px, calc(env(safe-area-inset-top) + 46px));
+    max-height: calc(100dvh - 132px);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  button,
+  input,
+  select,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0, 212, 255, 0.16);
+  }
+
+  button:active,
+  [role='button']:active { filter: brightness(1.18); }
 }

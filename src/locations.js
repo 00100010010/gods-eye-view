@@ -285,6 +285,48 @@ export function flyToPresetLocation(viewer, locationId, options = {}) {
   });
 }
 
+/** Closest and farthest useful camera ranges for a device-location flight. */
+export const USER_LOCATION_MIN_RANGE_M = 800;
+export const USER_LOCATION_MAX_RANGE_M = 5000;
+
+/** Widen uncertain device fixes while keeping the destination locally useful. */
+export function userLocationCameraRange(accuracyM) {
+  const accuracy = Number(accuracyM);
+  if (!Number.isFinite(accuracy) || accuracy < 0) return USER_LOCATION_MIN_RANGE_M;
+  return Math.min(
+    USER_LOCATION_MAX_RANGE_M,
+    Math.max(USER_LOCATION_MIN_RANGE_M, accuracy * 4),
+  );
+}
+
+/**
+ * Fly to browser-supplied device coordinates without geocoding or sending the
+ * coordinates to a server. Returns null rather than moving on invalid input.
+ */
+export function flyToUserLocation(viewer, position, options = {}) {
+  const latitude = Number(position?.latitude);
+  const longitude = Number(position?.longitude);
+  if (
+    !Number.isFinite(latitude)
+    || latitude < -90
+    || latitude > 90
+    || !Number.isFinite(longitude)
+    || longitude < -180
+    || longitude > 180
+  ) return null;
+
+  return flyToLandmark(viewer, latitude, longitude, {
+    range: finitePositive(options.range) || userLocationCameraRange(position?.accuracyM),
+    pitch: -45,
+    heading: 0,
+    buildingHeight: 0,
+    duration: finitePositive(options.duration) || 2.5,
+    onStart: options.onStart,
+    onComplete: options.onComplete,
+    onCancel: options.onCancel,
+  });
+}
+
 /**
  * Fly to a specific POI within a city.
  * Returns target position for orbit controller.

@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#02070c" />
   <title>God's Eye View</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -46,6 +49,11 @@
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
+    <form id="logout-form" method="post" action="/auth/logout">
+      <button id="logout-btn" type="submit" aria-label="Se déconnecter" title="Se déconnecter">
+        <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+      </button>
+    </form>
   </nav>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
@@ -489,7 +497,8 @@
         <span class="panel-title"><span class="dock-label-icon dock-label-icon-presets" aria-hidden="true"></span>VISUAL PRESETS</span>
         <span class="panel-divider"></span>
       </button>
-      <div id="control-panel-popover" class="dock-popover-content">
+      <div id="control-panel-popover" class="dock-popover-content touch-scroll-surface">
+      <button class="dock-tray-close" data-dock-close-target="control-panel" type="button" aria-label="Close visual presets" title="Close visual presets">&times;</button>
       <button class="dock-pin-btn" data-pin-target="control-panel" type="button" aria-label="Pin visual presets" aria-pressed="false" title="Keep visual presets open"><img src="/pin.svg" alt="" /></button>
       <div id="style-buttons" class="button-grid">
         <button class="style-btn active" data-style="normal">
@@ -555,7 +564,8 @@
         <div id="location-mini-city" class="location-mini-city">📍 Location: --</div>
         <div id="location-mini-poi" class="location-mini-poi">Landmark: --</div>
       </div>
-      <div class="dock-popover-content">
+      <div class="dock-popover-content touch-scroll-surface">
+        <button class="dock-tray-close" data-dock-close-target="location-bar" type="button" aria-label="Close location tray" title="Close location tray">&times;</button>
         <button class="dock-pin-btn" data-pin-target="location-bar" type="button" aria-label="Pin location tray" aria-pressed="false" title="Keep location tray open"><img src="/pin.svg" alt="" /></button>
         <div id="poi-row" class="poi-row-container"></div>
         <div class="location-bar-divider" id="location-bar-divider"></div>
@@ -566,6 +576,9 @@
               <span>&#x1F50E;</span>
             </button>
             <input type="text" id="location-search" placeholder="Search any location..." autocomplete="off" spellcheck="false" />
+            <button id="locate-me" class="locate-me-btn" type="button" aria-label="Use my current location" aria-busy="false" title="Use my current location">
+              <img src="/location.svg" alt="" />
+            </button>
           </div>
         </div>
       </div>

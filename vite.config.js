@@ -75,6 +75,7 @@ import {
   validTerrainResult,
 } from './src/data/terrainHeightsProxy.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from './src/voice/voiceCost.js';
+import { createAppAuthPlugin } from './scripts/serverAuth.js';
 
 /** Resolve __dirname for ESM context. */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -7659,6 +7660,41 @@ function keySetupEndpoint() {
 }
 
 /**
+ * Resolve the exact Host headers accepted by Vite. Public container bindings
+ * must never imply `allowedHosts: true`: Traefik preserves the requested Host,
+ * so a short explicit allowlist keeps DNS-rebinding protection in place.
+ */
+export function resolveAllowedHosts(env = {}) {
+  const configured = String(env.GEV_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((host) => host.trim())
+    .filter(Boolean);
+  if (configured.length) return [...new Set(configured)];
+  return ['localhost', '127.0.0.1', '.local'];
+}
+
+/** Read a dotenv value without variable expansion (bcrypt hashes contain `$`). */
+export function readLiteralDotenvValue(keys, mode = 'development', root = __dirname) {
+  const wanted = new Set(Array.isArray(keys) ? keys : [keys]);
+  const files = ['.env', '.env.local', `.env.${mode}`, `.env.${mode}.local`];
+  let found = '';
+  for (const filename of files) {
+    const target = path.join(root, filename);
+    if (!fs.existsSync(target)) continue;
+    for (const line of fs.readFileSync(target, 'utf8').split(/\r?\n/)) {
+      const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (!match || !wanted.has(match[1])) continue;
+      const value = match[2].trim();
+      found = ((value.startsWith("'") && value.endsWith("'"))
+        || (value.startsWith('"') && value.endsWith('"')))
+        ? value.slice(1, -1)
+        : value.replace(/\s+#.*$/, '').trim();
+    }
+  }
+  return found;
+}
+
+/**
  * Main Vite configuration factory.
  *
  * Loads .env files via Vite's loadEnv, registers Cesium + local proxy
@@ -7666,6 +7702,10 @@ function keySetupEndpoint() {
  * API keys to the client as import.meta.env defines.
  */
 export default defineConfig(({ mode }) => {
+  // Docker env_file values are already literal. Local Vite dotenv loading uses
+  // variable expansion, which would corrupt the `$2b$...` bcrypt markers, so
+  // preserve an inherited registry or read that one value without expansion.
+  const inheritedAuthUsers = process.env.GEV_AUTH_USERS || process.env.GEV_BASIC_AUTH_USERS || '';
   // Load only this checkout's dotenv files. Shell/Keychain values still win,
   // and no sibling workspace is consulted implicitly.
   const loaded = loadEnv(mode, __dirname, '');
@@ -7673,9 +7713,15 @@ export default defineConfig(({ mode }) => {
     if (process.env[key] === undefined) process.env[key] = val;
   }
   const env = { ...process.env };
-  const localAllowedHosts = ['localhost', '127.0.0.1', '.local'];
   return {
     plugins: [
+      createAppAuthPlugin({
+        usersRaw: inheritedAuthUsers
+          || readLiteralDotenvValue(['GEV_AUTH_USERS', 'GEV_BASIC_AUTH_USERS'], mode),
+        sessionSecret: env.GEV_SESSION_SECRET,
+        hostname: env.GEV_HOSTNAME || 'localhost',
+        required: env.GEV_REQUIRE_AUTH === '1',
+      }),
       cesium(),
       openSkyProxy(),
       celestrakProxy(),
@@ -7701,10 +7747,8 @@ export default defineConfig(({ mode }) => {
     server: {
       host: env.HOST || 'localhost',
       port: parseInt(env.PORT, 10) || 4173,
-      // When binding to all interfaces, allow any host; otherwise restrict to local names
-      allowedHosts: (env.HOST === '0.0.0.0' || env.HOST === '::')
-        ? true
-        : localAllowedHosts,
+      strictPort: true,
+      allowedHosts: resolveAllowedHosts(env),
       fs: {
         // Pinokio keeps optional credentials in this ignored local file.
         deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/ENVIRONMENT'],
@@ -7721,6 +7765,7 @@ export default defineConfig(({ mode }) => {
         'Content-Security-Policy': "frame-ancestors 'none'",
       },
     },
+    cacheDir: env.VITE_CACHE_DIR || 'node_modules/.vite',
     // Expose selected API keys to the browser via import.meta.env.*
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(env.GOOGLE_MAPS_API_KEY),

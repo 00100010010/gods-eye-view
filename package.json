@@ -35,6 +35,10 @@
     "doctor": "node scripts/setup-doctor.mjs",
     "dev": "vite",
     "dev:secure": "./scripts/dev-secure.sh",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "provision:auth": "node scripts/provision-auth.mjs",
+    "verify:browser": "node scripts/verify-browser.mjs",
+    "verify:responsive": "node scripts/verify-responsive.mjs",
     "opensky:import": "./scripts/opensky-import-client.sh",
     "build": "vite build",
     "preview": "vite preview",
@@ -44,17 +48,18 @@
   },
   "dependencies": {
     "@mapbox/vector-tile": "^3.0.0",
+    "bcryptjs": "^3.0.2",
     "cesium": "^1.124.0",
     "egm96-universal": "^1.1.1",
     "mgrs": "^2.1.0",
     "pbf": "^5.1.2",
-    "satellite.js": "^6.0.2"
+    "satellite.js": "^6.0.2",
+    "vite": "^8.2.2",
+    "vite-plugin-cesium": "1.2.23",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
-    "puppeteer": "^24.37.5",
-    "sharp": "^0.34.5",
-    "vite": "^6.0.0",
-    "vite-plugin-cesium": "^1.2.23",
-    "ws": "^8.21.0"
+    "puppeteer": "^25.9.0",
+    "sharp": "^0.35.4"
   }
 }
