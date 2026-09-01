@@ -50,7 +50,7 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
     <form id="logout-form" method="post" action="/auth/logout">
-      <button id="logout-btn" type="submit" aria-label="Se déconnecter" title="Se déconnecter">
+      <button id="logout-btn" type="submit" aria-label="Log out" title="Log out">
         <span class="material-symbols-outlined" aria-hidden="true">logout</span>
       </button>
     </form>
@@ -70,6 +70,16 @@
 
   <!-- Toast notification -->
   <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <aside id="map-source-notice" role="alert" aria-live="assertive" hidden>
+    <span class="material-symbols-outlined" aria-hidden="true">map</span>
+    <div>
+      <strong>MAP SOURCE UNAVAILABLE</strong>
+      <span id="map-source-notice-detail">Map tiles could not be loaded.</span>
+    </div>
+    <button id="map-source-retry" type="button">RETRY</button>
+    <button id="map-source-choose" type="button">SOURCES</button>
+    <button id="map-source-dismiss" type="button" aria-label="Dismiss map source message">&times;</button>
+  </aside>
 
   <!-- Safe frame guides for recording composition -->
   <div id="safe-frame-overlay">
@@ -586,6 +596,39 @@
   </div>
   </div>
 
+  <nav id="mobile-command-nav" aria-label="Primary tools">
+    <button type="button" data-mobile-panel="location-bar" aria-controls="location-bar">
+      <span class="material-symbols-outlined" aria-hidden="true">search</span><span>SEARCH</span>
+    </button>
+    <button type="button" data-mobile-panel="data-panel" aria-controls="data-panel">
+      <span class="material-symbols-outlined" aria-hidden="true">layers</span><span>LAYERS</span>
+    </button>
+    <span class="mobile-command-nav-spacer" aria-hidden="true"></span>
+    <button type="button" data-mobile-panel="global-context-panel" aria-controls="global-context-panel">
+      <span class="material-symbols-outlined" aria-hidden="true">travel_explore</span><span>CONTEXT</span>
+    </button>
+    <button id="mobile-more-toggle" type="button" aria-controls="mobile-more-menu" aria-expanded="false">
+      <span class="material-symbols-outlined" aria-hidden="true">more_horiz</span><span>MORE</span>
+    </button>
+  </nav>
+  <div id="mobile-sheet-backdrop" hidden></div>
+  <aside id="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" hidden>
+    <header>
+      <strong id="mobile-more-title">MORE TOOLS</strong>
+      <button id="mobile-more-close" type="button" aria-label="Close more tools">&times;</button>
+    </header>
+    <div class="mobile-more-grid">
+      <button type="button" data-mobile-panel="control-panel"><span class="material-symbols-outlined" aria-hidden="true">palette</span>VISUAL PRESETS</button>
+      <button type="button" data-mobile-panel="scene-panel"><span class="material-symbols-outlined" aria-hidden="true">movie</span>SCENES</button>
+      <button type="button" data-mobile-panel="pp-toggles"><span class="material-symbols-outlined" aria-hidden="true">tune</span>DISPLAY</button>
+      <button type="button" data-mobile-panel="cctv-panel"><span class="material-symbols-outlined" aria-hidden="true">videocam</span>CCTV</button>
+      <button type="button" data-mobile-action="clear"><span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>CLEAR LAYERS</button>
+      <button type="button" data-mobile-action="share"><span class="material-symbols-outlined" aria-hidden="true">link</span>SHARE</button>
+      <button type="button" data-mobile-action="reset"><span class="material-symbols-outlined" aria-hidden="true">public</span>RESET VIEW</button>
+      <button type="button" data-mobile-action="logout"><span class="material-symbols-outlined" aria-hidden="true">logout</span>LOG OUT</button>
+    </div>
+  </aside>
+
   <div id="left-panel-stack">
   <!-- Data Layer Toggle Panel -->
   <div id="data-panel" class="panel-collapsible collapsed active" data-panel-id="data-panel">
@@ -851,30 +894,23 @@
     <header class="first-run-header">
       <span class="first-run-kicker">MISSION CONTROL · FIRST LAUNCH</span>
     </header>
-    <h2 id="first-run-title">Choose your first view</h2>
-    <!-- The card's one persuasive line, owner-authored and VERBATIM (2026-08-23)
-         — including the unspaced em dash. The arc it has to carry: this looks
-         like something you should not have access to → the sources are all
-         public → the data is real. Tile subcopy stays purely functional. -->
-    <p id="first-run-description">It feels like a forbidden cockpit—then you realize the sources are public and the data is real.</p>
+    <h2 id="first-run-title">Start with the map</h2>
+    <!-- Essential first-run actions only; advanced feeds remain in Layers. -->
+    <p id="first-run-description">Use your location, search anywhere, or open live contacts.</p>
     <div class="first-run-choices">
+      <button type="button" data-first-run-choice="location">
+        <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+        <span><strong>USE MY LOCATION</strong><small>Ask this device, then frame what is around you</small></span>
+        <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
+      </button>
+      <button type="button" data-first-run-choice="search">
+        <span class="material-symbols-outlined" aria-hidden="true">search</span>
+        <span><strong>FIND A PLACE</strong><small>Search any city, address or landmark</small></span>
+        <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
+      </button>
       <button type="button" data-first-run-choice="contacts">
         <span class="material-symbols-outlined" aria-hidden="true">radar</span>
         <span><strong>LIVE CONTACTS</strong><small>Aircraft, vessels and nearby intelligence</small></span>
-        <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
-      </button>
-      <button type="button" data-first-run-choice="space-missions">
-        <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
-        <span><strong>SPACE MISSIONS</strong><small>Launches, spacecraft and orbital context</small></span>
-        <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
-      </button>
-      <button type="button" data-first-run-choice="environmental">
-        <span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span>
-        <!-- Title text is painted from ENVIRONMENTAL_LABEL_CHOICE at init. -->
-        <!-- Subcopy names BOTH feeds this tile turns on, because the launcher
-             optimizes for the fully configured experience (owner ruling,
-             2026-08-23) — see the mission table in src/firstRunExperience.js. -->
-        <span><strong data-first-run-environmental-title>ENVIRONMENTAL</strong><small>Live earthquakes and active fires, from USGS and NASA</small></span>
         <span class="material-symbols-outlined first-run-arrow" aria-hidden="true">arrow_forward</span>
       </button>
       <button type="button" class="first-run-explore" data-first-run-choice="explore">
@@ -892,7 +928,7 @@
     </div>
     <!-- Kept out of the footer row: it swaps to mission progress and errors, and
          a live region that also holds layout makes the row jump as it speaks. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the GEV MIC button in the dock lets you talk to the map.</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Start with your location or search; voice is optional.</p>
   </aside>
 
   <!-- POWER UP — in-app key setup. Dev-server only: src/keySetup.js removes
@@ -933,6 +969,9 @@
     </div>
   </div>
 
-  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    await import(/* @vite-ignore */ '/runtime-config.js');
+    await import('/src/main.js');
+  </script>
 </body>
 </html>

@@ -5010,6 +5010,23 @@ function trackBackfillProxies() {
  */
 export function openAiRealtimeProxy() {
   function install(middlewares) {
+    middlewares.use('/api/realtime/status', (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method not allowed' }));
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      res.end(JSON.stringify({ available: Boolean(process.env.OPENAI_API_KEY) }));
+    });
+
     middlewares.use('/api/openai/hud-summary', async (req, res) => {
       if (req.method !== 'POST') {
         res.statusCode = 405;
@@ -7694,6 +7711,54 @@ export function readLiteralDotenvValue(keys, mode = 'development', root = __dirn
   return found;
 }
 
+/** Install a dev middleware plugin under `vite preview` as well. */
+export function withPreviewMiddleware(plugin) {
+  if (
+    plugin
+    && typeof plugin.configureServer === 'function'
+    && typeof plugin.configurePreviewServer !== 'function'
+  ) {
+    plugin.configurePreviewServer = plugin.configureServer;
+  }
+  return plugin;
+}
+
+/**
+ * Browser-visible provider configuration is read at container runtime. The
+ * route remains behind the session gate because the auth plugin is registered
+ * first, and it exposes only the two keys upstream already ships to browsers.
+ */
+export function runtimeConfigEndpoint() {
+  const install = (middlewares) => {
+    middlewares.use('/runtime-config.js', (req, res) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.statusCode = 405;
+        res.end('Method not allowed');
+        return;
+      }
+      const config = {
+        GOOGLE_MAPS_API_KEY: String(process.env.GOOGLE_MAPS_API_KEY || ''),
+        CESIUM_ION_TOKEN: String(process.env.CESIUM_ION_TOKEN || ''),
+      };
+      const serialized = JSON.stringify(config).replace(/</g, '\\u003c');
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+      res.end(`window.__GEV_RUNTIME_CONFIG__ = Object.freeze(${serialized});\n`);
+    });
+  };
+  return {
+    name: 'gev-runtime-config',
+    configureServer(server) { install(server.middlewares); },
+    configurePreviewServer(server) { install(server.middlewares); },
+  };
+}
+
 /**
  * Main Vite configuration factory.
  *
@@ -7713,6 +7778,31 @@ export default defineConfig(({ mode }) => {
     if (process.env[key] === undefined) process.env[key] = val;
   }
   const env = { ...process.env };
+  const applicationMiddleware = [
+    openSkyProxy(),
+    celestrakProxy(),
+    tomtomProxy(),
+    firmsProxy(),
+    rocketLaunchesProxy(),
+    terrainHeightsProxy(),
+    adsbdbProxy(),
+    overpassProxy(),
+    militaryInstallationsProxy(),
+    regionalBriefProxy(),
+    weatherEffectsProxy(),
+    cctvProxy(),
+    radioBrowserProxy(),
+    gbfsProxy(),
+    adsbLolProxy(),
+    aisLiveProxy(),
+    trackBackfillProxies(),
+    openAiRealtimeProxy(),
+    googlePlacesContextProxy(),
+  ].map(withPreviewMiddleware);
+  const securityHeaders = {
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "frame-ancestors 'none'",
+  };
   return {
     plugins: [
       createAppAuthPlugin({
@@ -7723,25 +7813,8 @@ export default defineConfig(({ mode }) => {
         required: env.GEV_REQUIRE_AUTH === '1',
       }),
       cesium(),
-      openSkyProxy(),
-      celestrakProxy(),
-      tomtomProxy(),
-      firmsProxy(),
-      rocketLaunchesProxy(),
-      terrainHeightsProxy(),
-      adsbdbProxy(),
-      overpassProxy(),
-      militaryInstallationsProxy(),
-      regionalBriefProxy(),
-      weatherEffectsProxy(),
-      cctvProxy(),
-      radioBrowserProxy(),
-      gbfsProxy(),
-      adsbLolProxy(),
-      aisLiveProxy(),
-      trackBackfillProxies(),
-      openAiRealtimeProxy(),
-      googlePlacesContextProxy(),
+      ...applicationMiddleware,
+      runtimeConfigEndpoint(),
       keySetupEndpoint(),
     ],
     server: {
@@ -7760,10 +7833,14 @@ export default defineConfig(({ mode }) => {
       // app issue a perfectly same-origin credential write that passes every
       // Host/Origin check. These headers apply to everything this dev server
       // serves, which is what makes that attack impossible rather than unlikely.
-      headers: {
-        'X-Frame-Options': 'DENY',
-        'Content-Security-Policy': "frame-ancestors 'none'",
-      },
+      headers: securityHeaders,
+    },
+    preview: {
+      host: env.HOST || 'localhost',
+      port: parseInt(env.PORT, 10) || 4173,
+      strictPort: true,
+      allowedHosts: resolveAllowedHosts(env),
+      headers: securityHeaders,
     },
     cacheDir: env.VITE_CACHE_DIR || 'node_modules/.vite',
     // Expose selected API keys to the browser via import.meta.env.*

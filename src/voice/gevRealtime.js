@@ -11,12 +11,15 @@ import {
 } from './voiceCost.js';
 
 const TOKEN_URL = '/api/realtime/token';
+const STATUS_URL = '/api/realtime/status';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const STATUS = {
-  idle: 'OFF',
+  checking: 'CHECKING',
+  idle: 'READY',
   connecting: 'CONNECTING',
   listening: 'LISTENING',
   executing: 'EXECUTING',
+  unavailable: 'UNAVAILABLE',
   error: 'ERROR',
 };
 const CALL_DEDUPE_MS = 2500;
@@ -198,7 +201,8 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
     window.__gevVoiceCommands.stop({ removeUi: true });
   }
   const runner = createGevActionRunner({ viewer, styleManager, dataManager, sceneDirector, annotations });
-  const ui = createVoiceControl({ reset: true });
+  const touchFirst = prefersTouchVoiceControls();
+  const ui = createVoiceControl({ reset: true, touchFirst });
   const radioLayer = dataManager?.layers?.get('radio')?.module || null;
   const controller = new GevRealtimeController({ runner, ui, radioLayer, dataManager });
   // Deferred annotation outlines finish AFTER their tool result returned. Feed the
@@ -221,6 +225,7 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
   }
   controller.syncCostUi();
   controller.bindPushToTalkShortcut();
+  void controller.checkAvailability();
   window.__gevVoiceCommands = controller;
   return controller;
 }
@@ -312,6 +317,7 @@ export class GevRealtimeController {
     this.shortcutBlurHandler = null;
     this.shortcutVisibilityHandler = null;
     this.status = 'idle';
+    this.touchFirst = Boolean(ui?.touchFirst);
     // Monotonic generation token. Every start()/stop() bumps it; an in-flight
     // start() captures its value and bails after each await if it no longer
     // matches, so a stop() (or a second start()) mid-connect cannot leave an
@@ -330,11 +336,36 @@ export class GevRealtimeController {
   }
 
   isActive() {
-    return this.status !== 'idle' && this.status !== 'error';
+    return ['connecting', 'listening', 'executing'].includes(this.status);
+  }
+
+  async checkAvailability() {
+    if (!this.ui?.button) return;
+    this.ui.button.disabled = true;
+    this.setStatus('checking', 'CHECKING VOICE SERVICE');
+    try {
+      const response = await fetch(STATUS_URL, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload.available === false) {
+        this.setStatus('unavailable', 'OPENAI KEY REQUIRED');
+        return;
+      }
+      this.ui.button.disabled = false;
+      this.setStatus('idle', this.touchFirst ? 'TAP MIC TO START' : 'VOICE READY');
+    } catch {
+      // A status probe must not turn a transient network issue into a disabled
+      // microphone. Leave the action available; start() still reports errors.
+      this.ui.button.disabled = false;
+      this.setStatus('idle', this.touchFirst ? 'TAP MIC TO START' : 'VOICE READY');
+    }
   }
 
   async start({ pushToTalk = false } = {}) {
-    if (this.isActive()) return;
+    if (this.isActive() || this.status === 'checking' || this.status === 'unavailable') return;
     this.pauseRadioForVoice();
     const pushToTalkKeyHeld = pushToTalk && this.pushToTalkKeyHeld;
     const spaceKeyHeld = this.spaceKeyHeld;
@@ -1445,7 +1476,7 @@ export class GevRealtimeController {
       : detail;
     const primaryDetail = status === 'error'
       ? 'VOICE UNAVAILABLE'
-      : (resolvedDetail || (status === 'idle' ? 'VOICE STANDBY' : 'VOICE ACTIVE'));
+      : (resolvedDetail || (status === 'idle' ? 'VOICE READY' : 'VOICE ACTIVE'));
     this.ui.detail.textContent = primaryDetail;
     this.ui.detail.title = primaryDetail;
     if (this.ui.errorDetail) {
@@ -1453,7 +1484,7 @@ export class GevRealtimeController {
         ? (resolvedDetail || 'Voice session could not be started.')
         : '';
     }
-    if (status === 'idle' || status === 'connecting' || status === 'error') {
+    if (['checking', 'idle', 'connecting', 'unavailable', 'error'].includes(status)) {
       this.setVoiceSpeaker('idle');
     }
     if (shouldPauseRadioForVoice({ status, pushToTalkKeyHeld: this.pushToTalkKeyHeld })) {
@@ -1467,11 +1498,12 @@ export class GevRealtimeController {
    */
   updateVoiceButtonLabel() {
     if (!this.ui.buttonLabel) return;
-    this.ui.buttonLabel.textContent = 'MIC';
+    this.ui.buttonLabel.textContent = this.touchFirst ? 'TAP' : 'MIC';
     if (this.ui.helpDetail) {
       this.ui.helpDetail.textContent = resolveVoiceControlHint(
         this.pushToTalkMode,
         this.pushToTalkKeyHeld,
+        this.touchFirst,
       );
     }
   }
@@ -2507,10 +2539,19 @@ export function resolveVoiceVisualizerSpeaker(currentSpeaker, nextSpeaker, keepC
  * @param {boolean} pushToTalkKeyHeld
  * @returns {string}
  */
-export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld) {
+export function resolveVoiceControlHint(pushToTalkMode, pushToTalkKeyHeld, touchFirst = false) {
+  if (touchFirst) return 'Tap mic to start or stop voice';
   return pushToTalkMode && pushToTalkKeyHeld
     ? 'Release Space to send'
     : 'Hold Space to speak · click mic to toggle voice';
+}
+
+export function prefersTouchVoiceControls(windowRef = globalThis.window) {
+  try {
+    return Boolean(windowRef?.matchMedia?.('(hover: none), (pointer: coarse)')?.matches);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2539,7 +2580,7 @@ function resetVoiceVisualizerBars(bars) {
   }
 }
 
-function createVoiceControl({ reset = false } = {}) {
+function createVoiceControl({ reset = false, touchFirst = false } = {}) {
   let root = document.getElementById('gev-voice-control');
   if (root && reset) {
     root.remove();
@@ -2550,28 +2591,29 @@ function createVoiceControl({ reset = false } = {}) {
     root.id = 'gev-voice-control';
     root.dataset.status = 'idle';
     root.dataset.speaker = 'idle';
+    root.dataset.inputMode = touchFirst ? 'touch' : 'keyboard';
     root.innerHTML = `
       <div class="gev-voice-heading">
         <div class="gev-voice-kicker">AI AGENT</div>
-        <div id="gev-voice-status">OFF</div>
+        <div id="gev-voice-status">READY</div>
         <div class="gev-voice-cost">
           <button id="gev-voice-tier" class="gev-voice-tier-btn" type="button" aria-pressed="false" title="Voice model tier — applies next session">STD</button>
           <span id="gev-voice-cost-value" class="gev-voice-cost-value" data-level="ok" title="Estimated session cost">~$0.00</span>
         </div>
       </div>
-      <button id="gev-voice-button" type="button" aria-label="Voice control — hold Space to speak; click to toggle voice" aria-describedby="gev-voice-help">
+      <button id="gev-voice-button" type="button" aria-label="${touchFirst ? 'Tap to start or stop voice control' : 'Voice control — hold Space to speak; click to toggle voice'}" aria-describedby="gev-voice-help">
         <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /></span>
-        <span class="gev-mic-label">ON/OFF</span>
+        <span class="gev-mic-label">${touchFirst ? 'TAP' : 'MIC'}</span>
       </button>
       <div class="gev-voice-visualizer" aria-hidden="true">
         ${Array.from({ length: 15 }, (_, index) => `<span style="--bar:${index}"></span>`).join('')}
       </div>
       <div class="gev-voice-readout">
-        <div id="gev-voice-detail">VOICE STANDBY</div>
+        <div id="gev-voice-detail">${touchFirst ? 'TAP MIC TO START' : 'VOICE READY'}</div>
       </div>
       <div id="gev-voice-help" class="gev-voice-help-tray" role="tooltip">
         <span class="gev-voice-help-kicker">VOICE CONTROL</span>
-        <span class="gev-voice-help-detail">Hold Space to speak · click mic to toggle voice</span>
+        <span class="gev-voice-help-detail">${touchFirst ? 'Tap mic to start or stop voice' : 'Hold Space to speak · click mic to toggle voice'}</span>
       </div>
       <div class="gev-voice-error-tray" role="alert" aria-live="assertive">
         <div class="gev-voice-error-header">
@@ -2606,5 +2648,6 @@ function createVoiceControl({ reset = false } = {}) {
     errorDetail: root.querySelector('#gev-voice-error-detail'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
+    touchFirst,
   };
 }

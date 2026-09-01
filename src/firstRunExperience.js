@@ -24,96 +24,36 @@ export const FIRST_RUN_STORAGE_KEY = 'gev:first-run-mission:v1';
 /** Per-session dismissal. Written by every close path; scoped to sessionStorage. */
 export const FIRST_RUN_SESSION_KEY = 'gev:first-run-mission-session:v1';
 
-/**
- * Owner-selectable name for the fires/quakes mission. Flip this ONE constant to
- * re-label the tile; the alternates are pre-written so the choice is a taste
- * call at review time, not an edit.
- * @type {'ENVIRONMENTAL'|'EARTH_WATCH'|'ACTIVE_EVENTS'}
- */
-export const ENVIRONMENTAL_LABEL_CHOICE = 'ENVIRONMENTAL';
-
-const ENVIRONMENTAL_LABELS = Object.freeze({
-  ENVIRONMENTAL: Object.freeze({ title: 'ENVIRONMENTAL' }),
-  EARTH_WATCH: Object.freeze({ title: 'EARTH WATCH' }),
-  ACTIVE_EVENTS: Object.freeze({ title: 'ACTIVE EVENTS' }),
-});
-
-/**
- * @param {string} [choice]
- * @returns {{title: string}} The label set the constant above selects.
- */
-export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
-  return ENVIRONMENTAL_LABELS[choice] || ENVIRONMENTAL_LABELS.ENVIRONMENTAL;
-}
-
 /*
  * MISSION → APP STATE, AND WHAT IT IS ALLOWED TO PERSIST
  * ─────────────────────────────────────────────────────────────────────────────
- * Owner ruling: picking a mission carries the same weight as clicking the
- * toggles it represents — durable where those clicks are durable — but it must
- * never write a preference the visitor did not effectively choose by picking it.
- * Layer enablement IS durable in this app (`gev:layer-state:v2`, written by
- * LayerStateCoordinator._commitExplicit only for origin user/voice/tool), so:
+ *   TOUCHED, DURABLE      the Context panel reveal after choosing Contacts,
+ *                         exactly like opening that visible panel by hand.
+ *   TOUCHED, SESSION      browser geolocation/camera framing and place-search
+ *                         focus. Device coordinates never leave the browser.
+ *   NOT TOUCHED           live data layers for Location, Search, and Explore;
+ *                         those essential paths must not spend API quota.
+ *   NOT TOUCHED           visual style, detection tuning, model allocation,
+ *                         scope settings, and every unrelated preference.
  *
- *   TOUCHED, DURABLE      layer enables for the mission's OWN layers, at
- *                         `origin: 'user'` — identical to clicking those rows.
- *                         Choosing ENVIRONMENTAL *is* choosing those layers.
- *   TOUCHED, DURABLE      the Context panel reveal, but only for the two
- *                         Context missions, exactly as the visible Contacts /
- *                         Space Missions tabs do it. The globe missions open no
- *                         panel at all — nothing there needs explaining, and a
- *                         panel-collapse write is a pref nobody chose.
- *   TOUCHED, SESSION      the camera. Never persisted by anything.
- *   NOT TOUCHED           detection mode + density. The reasonable-defaults
- *                         landing owns the DENSE/75 start, and Contacts owns
- *                         detection through contactsDetectionPolicy while it is
- *                         active. A mission has no opinion.
- *   NOT TOUCHED           `_detectionUserOverridden`. Setting it would mean "the
- *                         operator hand-edited detection" and would silently
- *                         kill the CRT/NVG/FLIR auto-preset contract for the
- *                         whole session. Missions run through setContextMode and
- *                         DataManager.setEnabled, neither of which writes it.
- *   NOT TOUCHED           detection allocation (`gev:detection-allocation:v1`),
- *                         3D aircraft models, scope feather. All are defaults or
- *                         separate durable prefs the visitor did not choose here.
- *                         In particular nothing calls `_setModels3dEnabled` /
- *                         `_setModels3dMode`, which default to origin 'user' and
- *                         would persist a 3D choice nobody made.
- *
- * The two Context missions deliberately reuse `styleManager.setContextMode`, the
- * same facade the visible tabs and voice use, so Contacts detection ownership,
- * layer isolation and rollback stay in exactly one place.
+ * Contacts deliberately reuses `styleManager.setContextMode`, the same facade
+ * the visible tab and voice use, so isolation and rollback remain centralized.
  */
 
 /** @type {Readonly<Record<string, object>>} */
 export const FIRST_RUN_MISSIONS = Object.freeze({
+  location: Object.freeze({
+    kind: 'location',
+    busyText: 'Requesting device location…',
+  }),
+  search: Object.freeze({
+    kind: 'search',
+    busyText: 'Opening place search…',
+  }),
   contacts: Object.freeze({
     kind: 'context',
     contextMode: 'contacts',
     busyText: 'Starting live contacts…',
-  }),
-  'space-missions': Object.freeze({
-    kind: 'context',
-    contextMode: 'space-missions',
-    busyText: 'Opening space missions…',
-  }),
-  environmental: Object.freeze({
-    kind: 'globe',
-    // Live USGS earthquakes AND NASA FIRMS active fires. The launcher optimizes
-    // for the FULLY CONFIGURED experience (owner ruling, 2026-08-23): the tile
-    // promises both, so it turns on both, and the subcopy in index.html says so.
-    //
-    // Keyless, FIRMS is honest where it counts — its own layer row reads
-    // "UNAVAILABLE · NASA FIRMS · LIVE · KEY REQUIRED", and the quakes half of
-    // the tile still delivers in full. What is NOT honest is the GLOBAL status
-    // chip, which has no key-required terminal state and folds that row into
-    // "LOAD FAILED". That aggregation is the defect, not this preset: fixing it
-    // means a KEY REQUIRED terminal state in src/loadingFeedback.js, a state
-    // machine shared by every layer and not a thing to refactor the night
-    // before a launch. LEDGERED post-launch. Until it lands, keyless visitors
-    // are judged on the layer row, which tells them the truth.
-    layerIds: Object.freeze(['earthquakes', 'local-firms']),
-    busyText: 'Scanning active events…',
   }),
   explore: Object.freeze({ kind: 'none' }),
 });
@@ -247,34 +187,31 @@ export function rememberFirstRunSessionDismissed(sessionStorageRef) {
  * @param {string} choice Key of FIRST_RUN_MISSIONS.
  * @param {object} deps
  * @param {(mode: string) => Promise<object>} deps.setContextMode
- * @param {(layerId: string) => Promise<boolean>} deps.setLayerEnabled
- * @param {() => Promise<any>} deps.flyToGlobe
- * @returns {Promise<{ok: boolean, choice: string, result?: object, failedLayerIds?: string[]}>}
+ * @param {() => Promise<object>} deps.useCurrentLocation
+ * @param {() => Promise<object>} deps.openSearch
+ * @returns {Promise<{ok: boolean, choice: string, result?: object}>}
  */
-export async function runFirstRunChoice(choice, { setContextMode, setLayerEnabled, flyToGlobe }) {
+export async function runFirstRunChoice(choice, {
+  setContextMode,
+  useCurrentLocation,
+  openSearch,
+}) {
   const mission = FIRST_RUN_MISSIONS[choice];
   if (!mission) return { ok: false, choice };
   if (mission.kind === 'none') return { ok: true, choice };
+  if (mission.kind === 'location') {
+    const result = await useCurrentLocation();
+    return { ok: Boolean(result?.ok), choice, result };
+  }
+  if (mission.kind === 'search') {
+    const result = await openSearch();
+    return { ok: result?.ok !== false, choice, result };
+  }
   if (mission.kind === 'context') {
     const result = await setContextMode(mission.contextMode);
     return { ok: Boolean(result?.ok), choice, result };
   }
-  // Globe missions: start the pull-out and the layer work together so the
-  // camera is already moving while the feeds spin up. The flight is framing,
-  // not the mission — a stalled or superseded flight never fails the tile.
-  const flight = Promise.resolve()
-    .then(() => flyToGlobe())
-    .catch(() => null);
-  const outcomes = await Promise.all(mission.layerIds.map(async (layerId) => {
-    try {
-      return { layerId, ok: (await setLayerEnabled(layerId)) !== false };
-    } catch {
-      return { layerId, ok: false };
-    }
-  }));
-  await flight;
-  const failedLayerIds = outcomes.filter((entry) => !entry.ok).map((entry) => entry.layerId);
-  return { ok: failedLayerIds.length === 0, choice, failedLayerIds };
+  return { ok: false, choice };
 }
 
 /**
@@ -304,7 +241,6 @@ export function exclusiveSurfaceActive(documentRef = globalThis.document) {
  * Wire and reveal the mission launcher.
  * @param {object} input
  * @param {object} input.styleManager Initialized StyleManager.
- * @param {object} [input.dataManager] DataManager, for the globe missions' layers.
  * @param {Document} [input.documentRef]
  * @param {Storage} [input.storage]
  * @param {Storage} [input.sessionStorageRef]
@@ -313,7 +249,6 @@ export function exclusiveSurfaceActive(documentRef = globalThis.document) {
  */
 export function initFirstRunExperience({
   styleManager,
-  dataManager = styleManager?._dataManager,
   documentRef = globalThis.document,
   storage,
   sessionStorageRef,
@@ -332,11 +267,6 @@ export function initFirstRunExperience({
     root.remove();
     return null;
   }
-
-  // The tile name is owner-switchable from one constant, so paint it from the
-  // module rather than trusting the markup to have been edited to match.
-  const environmentalTitle = root.querySelector('[data-first-run-environmental-title]');
-  if (environmentalTitle) environmentalTitle.textContent = environmentalLabel().title;
 
   const status = root.querySelector('[data-first-run-status]');
   const suppressBox = root.querySelector('[data-first-run-suppress]');
@@ -446,15 +376,13 @@ export function initFirstRunExperience({
             // setContextMode is also a voice/internal facade and deliberately
             // does not decide panel chrome. This first-run click is an explicit
             // visual choice, so reveal the result exactly as the visible
-            // Contacts / Space Missions tabs do.
+            // Contacts tab does.
             styleManager.setPanelCollapsed?.('global-context-panel', false, { explicit: true });
           }
           return result;
         },
-        // `origin: 'user'` on purpose: a mission tile is a real person choosing
-        // these layers, so it persists exactly as clicking those rows would.
-        setLayerEnabled: (layerId) => dataManager.setEnabled(layerId, true, { origin: 'user' }),
-        flyToGlobe: () => styleManager.resetToGlobeView(),
+        useCurrentLocation: () => styleManager.useCurrentLocation(),
+        openSearch: () => styleManager.focusLocationSearch(),
       });
     } catch (error) {
       // A thrown mission is a real defect worth seeing in a bug report; the
@@ -463,7 +391,7 @@ export function initFirstRunExperience({
     }
     if (closing) return;
     if (outcome?.ok) {
-      dismiss();
+      dismiss({ restoreFocus: choice !== 'search' });
       return;
     }
     const failed = outcome?.failedLayerIds?.length

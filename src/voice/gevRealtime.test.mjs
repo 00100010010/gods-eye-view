@@ -64,6 +64,7 @@ test('voice control help tray reflects the push-to-talk key state', () => {
     resolveVoiceControlHint(true, false),
     'Hold Space to speak · click mic to toggle voice',
   );
+  assert.equal(resolveVoiceControlHint(false, false, true), 'Tap mic to start or stop voice');
 });
 
 test('voice visualizer reads assistant output while the assistant is speaking', () => {

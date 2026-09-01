@@ -34,6 +34,7 @@ import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
+import { initMobileNavigation } from './mobileNavigation.js';
 
 initLogoGaze();
 
@@ -71,14 +72,25 @@ function describeError(error) {
 async function init() {
   const loadingScreen = document.getElementById('loading-screen');
   const loaderStatus = loadingScreen.querySelector('.loader-status');
+  const mapSourceNotice = document.getElementById('map-source-notice');
+  const mapSourceNoticeDetail = document.getElementById('map-source-notice-detail');
+  const showMapSourceNotice = (message) => {
+    if (!mapSourceNotice || !mapSourceNoticeDetail) return;
+    mapSourceNoticeDetail.textContent = message || 'The selected map source could not be loaded.';
+    mapSourceNotice.hidden = false;
+  };
+  const hideMapSourceNotice = () => {
+    if (mapSourceNotice) mapSourceNotice.hidden = true;
+  };
 
   try {
     loaderStatus.textContent = 'Configuring viewer...';
 
     // A direct Google key provides Google 3D plus GEV place search. Cesium ion
     // can host the same 3D tiles and also powers Bing/world-terrain stacks.
-    const cesiumToken = import.meta.env.CESIUM_ION_TOKEN;
-    const googleApiKey = import.meta.env.GOOGLE_MAPS_API_KEY;
+    const runtimeConfig = window.__GEV_RUNTIME_CONFIG__ || {};
+    const cesiumToken = runtimeConfig.CESIUM_ION_TOKEN || import.meta.env.CESIUM_ION_TOKEN;
+    const googleApiKey = runtimeConfig.GOOGLE_MAPS_API_KEY || import.meta.env.GOOGLE_MAPS_API_KEY;
     if (googleApiKey) window.__GOOGLE_MAPS_API_KEY__ = googleApiKey;
 
     // Create the Cesium viewer with minimal chrome
@@ -182,13 +194,37 @@ async function init() {
       // live scene state, so intermediate emissions are harmless.
       onChange: (state) => {
         window.dispatchEvent(new CustomEvent('gev:map-stack-changed', { detail: state }));
+        if (state?.lastError) showMapSourceNotice(state.lastError);
+        else if (state?.status === 'ready') hideMapSourceNotice();
       },
-      onError: (message) => console.warn('[MapStack]', message),
+      onError: (message) => {
+        console.warn('[MapStack]', message);
+        showMapSourceNotice(message);
+      },
     });
     await mapStackController.setStack(tileset ? 'photoreal' : 'esri-imagery', { silent: true });
 
     // Initialize the style manager (post-processing, HUD, locations, share links)
     const styleManager = new StyleManager(viewer, { mapStackController });
+    document.getElementById('map-source-retry')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = 'RETRYING…';
+      try {
+        const state = await mapStackController.retryActiveStack();
+        if (!state?.lastError) hideMapSourceNotice();
+      } finally {
+        button.disabled = false;
+        button.textContent = 'RETRY';
+      }
+    });
+    document.getElementById('map-source-choose')?.addEventListener('click', () => {
+      styleManager.setPanelCollapsed('control-panel', false, {
+        explicit: true,
+        persist: false,
+      });
+    });
+    document.getElementById('map-source-dismiss')?.addEventListener('click', hideMapSourceNotice);
     // The previous multi-canvas weather compositor remains disabled. Cockpit
     // clouds use a separate, capped low-resolution GPU pass that never attaches
     // Cesium fog or post-process stages and is fully stopped in map mode.
@@ -258,10 +294,7 @@ async function init() {
       const revealFirstRun = () => {
         if (firstRunRevealed) return;
         firstRunRevealed = true;
-        // dataManager is passed explicitly: the globe missions enable bundled
-        // keyless layers through it, and reaching for styleManager._dataManager
-        // would make a private field part of this feature's contract.
-        initFirstRunExperience({ styleManager, dataManager });
+        initFirstRunExperience({ styleManager });
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
       setTimeout(revealFirstRun, 900);
@@ -327,6 +360,7 @@ async function init() {
       requestRender: governorRequestRender,
     };
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
+    window.__godsEyeView.mobileNavigation = initMobileNavigation({ styleManager });
 
   } catch (error) {
     console.error("God's Eye View initialization failed:", error);

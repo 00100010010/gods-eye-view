@@ -390,7 +390,7 @@ test('Esri fallbacks report and attribute the imagery source actually rendered',
 test('repeated active Esri tile failures fall back to OSM and one transient does not', () => {
   const controller = readFileSync(new URL('./mapStackController.js', import.meta.url), 'utf8');
   assert.match(controller, /let failures = 0/);
-  assert.match(controller, /if \(failures < 2 \|\| this\._esriFallbackPending\) return/);
+  assert.match(controller, /if \(failures < 2 \|\| this\._imageryFailurePending\) return/);
   assert.match(controller, /this\.setStack\('osm', \{ silent: true \}\)/);
   assert.match(controller, /state\?\.activeId === 'osm'[\s\S]*?this\._emitChange\('error'\)/);
   assert.match(
@@ -398,4 +398,12 @@ test('repeated active Esri tile failures fall back to OSM and one transient does
     /gen !== this\._switchGen \|\| this\._activeImageryProvider !== resolution\.provider/,
     'a stale provider error must not replace a newer user selection',
   );
+});
+
+test('repeated OSM tile failures hide error artwork and expose a retry path', () => {
+  const controller = readFileSync(new URL('./mapStackController.js', import.meta.url), 'utf8');
+  assert.match(controller, /if \(this\._imageryLayer\) this\._imageryLayer\.show = false/);
+  assert.match(controller, /map tiles are unavailable\. Choose another map source or retry/);
+  assert.match(controller, /async retryActiveStack\(\)/);
+  assert.match(controller, /this\._imageryProviders\.delete\(id\)/);
 });

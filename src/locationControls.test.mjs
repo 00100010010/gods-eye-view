@@ -11,9 +11,10 @@ test('LOCATION exposes an accessible, explicit device-location action', () => {
     html,
     /id="locate-me"[^>]*type="button"[^>]*aria-label="Use my current location"[^>]*aria-busy="false"/,
   );
-  assert.match(ui, /this\._locateMeBtn\?\.addEventListener\('click', async \(\) => \{/);
+  assert.match(ui, /this\._locateMeBtn\?\.addEventListener\('click', \(\) => void this\.useCurrentLocation\(\)\)/);
+  assert.match(ui, /async useCurrentLocation\(\) \{/);
   assert.match(ui, /const position = await requestUserLocation\(\);/);
-  assert.match(ui, /if \(!this\._reassertNavigationHandoff\(generation\)\) return;/);
+  assert.match(ui, /if \(!this\._reassertNavigationHandoff\(generation\)\) return \{ ok: false \};/);
   assert.match(ui, /flyToUserLocation\(this\.viewer, position\)/);
   assert.doesNotMatch(browserLocation, /\bfetch\s*\(/, 'device coordinates must remain local');
 });

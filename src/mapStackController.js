@@ -88,7 +88,7 @@ export class MapStackController {
     this._imageryLayer = null;
     this._activeImageryProvider = null;
     this._removeImageryErrorListener = null;
-    this._esriFallbackPending = false;
+    this._imageryFailurePending = false;
     this._imageryProviders = new Map();
     this._isSwitching = false;
     this._lastError = null;
@@ -192,6 +192,7 @@ export class MapStackController {
 
     const gen = ++this._switchGen;
     this._isSwitching = true;
+    this._imageryFailurePending = false;
     this._lastError = null;
     if (!silent) this._emitChange('switching');
 
@@ -232,6 +233,23 @@ export class MapStackController {
     }
 
     return this.getState();
+  }
+
+  /**
+   * Rebuild the active imagery provider and try the selected source again.
+   * Failed providers are deliberately evicted from the session cache so a
+   * retry never reuses the same blocked/broken instance.
+   */
+  async retryActiveStack() {
+    const activeId = this._activeId;
+    const activeProvider = this._activeImageryProvider;
+    for (const [id, resolution] of this._imageryProviders.entries()) {
+      if (id === activeId || resolution?.provider === activeProvider) {
+        this._imageryProviders.delete(id);
+      }
+    }
+    this._lastError = null;
+    return this.setStack(activeId);
   }
 
   getState(status = this._isSwitching ? 'switching' : 'ready') {
@@ -275,7 +293,7 @@ export class MapStackController {
     this._activeImageryProvider = resolution.provider;
     this.viewer.imageryLayers.add(this._imageryLayer, 0);
     this._syncEsriAttribution(resolution.effectiveStackId);
-    this._watchEsriProvider(resolution, gen);
+    this._watchImageryProvider(resolution, stack, gen);
 
     if (this.googleTileset) this.googleTileset.show = false;
     this.viewer.scene.globe.show = true;
@@ -359,12 +377,12 @@ export class MapStackController {
   }
 
   /**
-   * Esri provider construction can succeed while its first tile requests fail.
-   * Two failures for the active provider trigger the same truthful OSM fallback
-   * as a construction failure; one transient error is left to Cesium's retry.
+   * Provider construction can succeed while every tile request fails. One
+   * transient error is left to Cesium's retry; repeated failures either move
+   * Esri to the keyless OSM fallback or hide the broken layer so a provider's
+   * raw error image can never tile the globe.
    */
-  _watchEsriProvider(resolution, gen) {
-    if (resolution.effectiveStackId !== 'esri-imagery') return;
+  _watchImageryProvider(resolution, requestedStack, gen) {
     const errorEvent = resolution.provider?.errorEvent;
     if (!errorEvent?.addEventListener) return;
     let failures = 0;
@@ -374,18 +392,32 @@ export class MapStackController {
       failures = Number.isInteger(retryCount) && retryCount >= 0
         ? Math.max(failures + 1, retryCount + 1)
         : failures + 1;
-      if (failures < 2 || this._esriFallbackPending) return;
-      this._esriFallbackPending = true;
-      const message = 'Esri Satellite tile requests failed; using OSM';
-      this._onError?.(message, this.getStack('esri-imagery'));
-      void this.setStack('osm', { silent: true }).then((state) => {
-        if (state?.activeId === 'osm') {
-          this._lastError = message;
-          this._emitChange('error');
-        }
-      }).finally(() => {
-        this._esriFallbackPending = false;
-      });
+      if (failures < 2 || this._imageryFailurePending) return;
+      this._imageryFailurePending = true;
+
+      if (resolution.effectiveStackId === 'esri-imagery') {
+        const message = 'Esri Satellite tiles are unavailable; using OSM';
+        this._onError?.(message, this.getStack('esri-imagery'));
+        void this.setStack('osm', { silent: true }).then((state) => {
+          if (state?.activeId === 'osm') {
+            this._lastError = message;
+            this._emitChange('error');
+          }
+        }).finally(() => {
+          this._imageryFailurePending = false;
+        });
+        return;
+      }
+
+      if (this._imageryLayer) this._imageryLayer.show = false;
+      const label = this.getStack(resolution.effectiveStackId)?.label
+        || requestedStack?.label
+        || 'Map';
+      const message = `${label} map tiles are unavailable. Choose another map source or retry.`;
+      this._lastError = message;
+      this._onError?.(message, requestedStack);
+      this._emitChange('error');
+      governorRequestRender('map-stack-error');
     });
   }
 

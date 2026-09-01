@@ -9281,6 +9281,57 @@ export class StyleManager {
    * and geocoding search input.
    * @returns {void}
    */
+  focusLocationSearch() {
+    this.setPanelCollapsed('location-bar', false, {
+      explicit: true,
+      persist: false,
+      syncShare: false,
+    });
+    this._locationSearch?.classList.add('expanded');
+    requestAnimationFrame(() => this._locationSearch?.focus({ preventScroll: true }));
+    return { ok: Boolean(this._locationSearch) };
+  }
+
+  async useCurrentLocation() {
+    const generation = this._beginDeferredNavigation('location');
+    if (generation === false) return { ok: false };
+    this._activeLocationSearchGeneration = generation;
+    if (this._locateMeBtn) {
+      this._locateMeBtn.disabled = true;
+      this._locateMeBtn.classList.add('locating');
+      this._locateMeBtn.setAttribute('aria-busy', 'true');
+    }
+
+    try {
+      const position = await requestUserLocation();
+      if (this._disposed || generation !== this._navigationGeneration) return { ok: false };
+      if (!this._reassertNavigationHandoff(generation)) return { ok: false };
+      const destination = flyToUserLocation(this.viewer, position);
+      if (!destination) {
+        throw Object.assign(new Error('Invalid device location'), { code: 'invalid-position' });
+      }
+
+      this._searchedLocationLabel = 'My location, Device GPS';
+      this._setActiveLocation(null);
+      this._currentTarget = destination.targetPosition;
+      this._currentPoi = null;
+      this._collapsePOIRow();
+      this._updateLocationMiniStatus();
+      const accuracy = position.accuracyM;
+      this._showToast(Number.isFinite(accuracy)
+        ? `Current location found · ±${Math.round(accuracy)} m`
+        : 'Current location found');
+      return { ok: true, position };
+    } catch (error) {
+      if (this._disposed || generation !== this._navigationGeneration) return { ok: false };
+      console.warn('[Location] Device geolocation failed:', error?.message || error);
+      this._showToast(userLocationErrorMessage(error));
+      return { ok: false, error };
+    } finally {
+      this._settleLocationSearchUi(generation);
+    }
+  }
+
   _initLocationBar() {
     const QWERTY_KEYS = ['Q', 'W', 'E', 'R', 'T'];
 
@@ -9324,41 +9375,7 @@ export class StyleManager {
     // Device location is a separate, explicit action so opening the text search
     // never triggers a surprise permission prompt. Coordinates remain local to
     // the browser and go straight to the Cesium camera.
-    this._locateMeBtn?.addEventListener('click', async () => {
-      const generation = this._beginDeferredNavigation('location');
-      if (generation === false) return;
-      this._activeLocationSearchGeneration = generation;
-      this._locateMeBtn.disabled = true;
-      this._locateMeBtn.classList.add('locating');
-      this._locateMeBtn.setAttribute('aria-busy', 'true');
-
-      try {
-        const position = await requestUserLocation();
-        if (this._disposed || generation !== this._navigationGeneration) return;
-        if (!this._reassertNavigationHandoff(generation)) return;
-        const destination = flyToUserLocation(this.viewer, position);
-        if (!destination) {
-          throw Object.assign(new Error('Invalid device location'), { code: 'invalid-position' });
-        }
-
-        this._searchedLocationLabel = 'My location, Device GPS';
-        this._setActiveLocation(null);
-        this._currentTarget = destination.targetPosition;
-        this._currentPoi = null;
-        this._collapsePOIRow();
-        this._updateLocationMiniStatus();
-        const accuracy = position.accuracyM;
-        this._showToast(Number.isFinite(accuracy)
-          ? `Current location found · ±${Math.round(accuracy)} m`
-          : 'Current location found');
-      } catch (error) {
-        if (this._disposed || generation !== this._navigationGeneration) return;
-        console.warn('[Location] Device geolocation failed:', error?.message || error);
-        this._showToast(userLocationErrorMessage(error));
-      } finally {
-        this._settleLocationSearchUi(generation);
-      }
-    });
+    this._locateMeBtn?.addEventListener('click', () => void this.useCurrentLocation());
 
     // Search submit on Enter
     this._locationSearch.addEventListener('keydown', async (e) => {

@@ -9,7 +9,8 @@ RUN npm ci --omit=dev --ignore-scripts \
   && npm cache clean --force
 
 COPY --chown=node:node . .
-RUN mkdir -p /app/.gev-cache /app/.gev-logs /app/node_modules/.vite-temp \
+RUN npm run build \
+  && mkdir -p /app/.gev-cache /app/.gev-logs /app/node_modules/.vite-temp \
   && chown -R node:node /app/.gev-cache /app/.gev-logs /app/node_modules/.vite-temp
 
 ENV NODE_ENV=production \
@@ -21,4 +22,4 @@ USER node
 
 EXPOSE 4173
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "4173", "--strictPort"]
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173", "--strictPort"]
