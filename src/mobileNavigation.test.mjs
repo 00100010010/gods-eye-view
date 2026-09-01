@@ -20,12 +20,14 @@ test('phone navigation keeps four primary tools around the centered microphone',
 
 test('advanced tools move into one closable mobile menu', () => {
   const menu = html.slice(html.indexOf('<aside id="mobile-more-menu"'), html.indexOf('</aside>', html.indexOf('<aside id="mobile-more-menu"')));
-  for (const panel of ['control-panel', 'scene-panel', 'pp-toggles', 'cctv-panel']) {
+  for (const panel of ['control-panel', 'pp-toggles', 'cctv-panel']) {
     assert.match(menu, new RegExp(`data-mobile-panel="${panel}"`));
   }
-  for (const action of ['clear', 'share', 'reset', 'logout']) {
+  for (const action of ['reset', 'logout']) {
     assert.match(menu, new RegExp(`data-mobile-action="${action}"`));
   }
+  assert.doesNotMatch(menu, /data-mobile-panel="scene-panel"/);
+  assert.doesNotMatch(menu, /data-mobile-action="(?:clear|share)"/);
   assert.match(menu, /id="mobile-more-close"[^>]*aria-label="Close more tools"/);
 });
 

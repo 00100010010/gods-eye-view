@@ -133,7 +133,7 @@ expect('manifest linked', app.body.includes(Buffer.from('manifest.webmanifest'))
 expect('logout control present', app.body.includes(Buffer.from('action="/auth/logout"')), 'POST form');
 expect('device-location control present', app.body.includes(Buffer.from('id="locate-me"')), 'explicit GPS action');
 expect('mobile tray close controls present', app.body.includes(Buffer.from('data-dock-close-target="control-panel"'))
-  && app.body.includes(Buffer.from('data-dock-close-target="location-bar"')), 'LOCATION + PRESETS close actions');
+  && app.body.includes(Buffer.from('data-dock-close-target="location-bar"')), 'LOCATION + MAP SOURCES close actions');
 expect('same-origin microphone and geolocation permitted', String(app.headers['permissions-policy']).includes('microphone=(self)')
   && String(app.headers['permissions-policy']).includes('geolocation=(self)'), app.headers['permissions-policy']);
 expect('cross-origin map requests disclose origin only', app.headers['referrer-policy'] === 'strict-origin-when-cross-origin', app.headers['referrer-policy']);

@@ -4,14 +4,12 @@ import {
   migrateDetectionState,
   normalizeAllocationStrategy,
 } from './data/detectionPolicy.js';
-import { clampScopeTerminusPct } from './scopeMask.js';
 import { decodeLayerStateParams, encodeLayerStateParams } from './data/layerState.js';
 
 /**
  * Share Links — URL Hash State Management
  *
- * Encodes camera position + style into the URL hash so links can be shared.
- * Format: #lat=37.77&lon=-122.42&alt=800&heading=0&pitch=-35&style=nvg&bloom=1&bi=84&bv=2&sharpen=0&si=65&hud=tactical&hv=1&dm=BALANCED&dd=50&da=elastic&kf=16&ko=0&cr=0&map=photoreal
+ * Encodes camera position and application state into the URL hash.
  */
 
 const DEBOUNCE_MS = 500;
@@ -20,12 +18,6 @@ const LEGACY_BLOOM_FALLBACK = 50;
 // Style name mapping: internal → URL-friendly
 const STYLE_TO_URL = {
   normal: 'normal',
-  retro: 'crt',
-  surveillance: 'nvg',
-  thermal: 'flir',
-  anime: 'anime',
-  noir: 'noir',
-  snow: 'snow',
 };
 
 const SHARE_UI_STATE_PARAM = 'ui';
@@ -38,7 +30,6 @@ const SHARE_PANEL_STATE_REGISTRY = Object.freeze([
   { id: 'data-panel', token: 'd', pinnable: false },
   { id: 'cctv-panel', token: 'v', pinnable: false },
   { id: 'radio-panel', token: 'r', pinnable: false },
-  { id: 'scene-panel', token: 's', pinnable: false },
   { id: 'global-context-panel', token: 'g', pinnable: false },
   { id: 'pp-toggles', token: 'p', pinnable: false },
   { id: 'param-slider-panel', token: 'm', pinnable: false },
@@ -47,10 +38,6 @@ const SHARE_PANEL_STATE_REGISTRY = Object.freeze([
 const SHARE_PANEL_STATE_BY_TOKEN = Object.freeze(new Map(
   SHARE_PANEL_STATE_REGISTRY.map((entry) => [entry.token, entry]),
 ));
-
-const URL_TO_STYLE = Object.fromEntries(
-  Object.entries(STYLE_TO_URL).map(([k, v]) => [v, k])
-);
 
 const SHARE_STYLE_PARAM_REGISTRY = Object.freeze({
   retro: Object.freeze([
@@ -114,14 +101,6 @@ export class ShareLinkManager {
     // question and deliberately stays at 5.
     this._detectionOutsideOpacityPct = 1;
     this._celestialRingEnabled = false;
-    this._scopeEnabled = true;
-    // Feather opens on a soft 11% scope-mask edge (owner final lock 2026-08-24,
-    // superseding the 08-22 hard-crop and 08-23 8% rulings) — mirrors
-    // SCOPE_FEATHER_RATIO_DEFAULT in scopeMask.js and the slider's markup value.
-    this._scopeFeatherPct = 11;
-    // null = the altitude-adaptive terminus (the default). A number pins the
-    // outside-fill opacity as a percent, 94..100. (`sce`, 2026-08-17)
-    this._scopeTerminusPct = null;
     this._mapStack = 'photoreal';
     this._layerStateProvider = null;
     this._panelStateProvider = null;
@@ -174,7 +153,9 @@ export class ShareLinkManager {
       parseOr(params.get('dd'), 50),
       50,
     );
-    const style = URL_TO_STYLE[params.get('style')] || 'normal';
+    // Visual presets were retired. Older links keep their camera/layers but
+    // always open in the sole supported presentation: Normal.
+    const style = 'normal';
     const decodedLayerState = decodeLayerStateParams(params);
     const state = {
       lat,
@@ -185,7 +166,7 @@ export class ShareLinkManager {
       roll: parseOr(params.get('roll'), 0),
       style,
       styleParams: decodeStyleParamState(params, style),
-      bloom: params.get('bloom') === '1',
+      bloom: false,
       sharpen: params.get('sharpen') === '1',
       bloomIntensity: parseOr(params.get('bi'), LEGACY_BLOOM_FALLBACK),
       bloomVersion: parseOr(params.get('bv'), 1),
@@ -205,25 +186,6 @@ export class ShareLinkManager {
       // celestialRing.js.
       detectionOutsideOpacityPct: Math.max(0, Math.min(100, Math.round(parseOr(params.get('ko'), 5)))),
       celestialRing: params.has('cr') ? params.get('cr') === '1' : false,
-      scopeEnabled: params.has('sc') ? params.get('sc') === '1' : true,
-      // Deliberately still 35 through both later default moves (0 on
-      // 2026-08-22, 8 on 2026-08-23). This is the PARSE fallback for a link that
-      // predates `scf` entirely, and such a link was authored when 35 was what
-      // its author saw — restoring their view is the point of a share link. A
-      // link from the feather-0 era is unaffected either way: it carries
-      // `scf=0` explicitly, because the generator always writes the field. The
-      // first-run default is a different question, answered in scopeMask.js.
-      // (`_scopeFeatherPct` in the constructor tracks the default: that one
-      // mirrors live state for the link this session generates, so it must match
-      // the mask, not the archive.)
-      scopeFeatherPct: Math.max(0, Math.min(100, Math.round(parseOr(params.get('scf'), 35)))),
-      // Absent (or non-numeric) `sce` = adaptive (null), the default behavior;
-      // a value pins the terminus opacity percent, clamped into the SUPPORTED
-      // 94..100 band. `sce=0` used to survive as a sub-94 terminus — a hole in
-      // the mask — and then got written straight back out on the next update.
-      scopeTerminusPct: params.has('sce')
-        ? clampScopeTerminusPct(params.get('sce'))
-        : null,
       mapStack: params.get('map') || 'photoreal',
       layerState: decodedLayerState,
       layerStateInvalid: params.get('v') === '2'
@@ -321,9 +283,6 @@ export class ShareLinkManager {
         detectionFadePct: visualCurrent ? state.detectionFadePct : undefined,
         detectionOutsideOpacityPct: visualCurrent ? state.detectionOutsideOpacityPct : undefined,
         celestialRing: visualCurrent ? state.celestialRing : undefined,
-        scopeEnabled: visualCurrent ? state.scopeEnabled : undefined,
-        scopeFeatherPct: visualCurrent ? state.scopeFeatherPct : undefined,
-        scopeTerminusPct: visualCurrent ? state.scopeTerminusPct : undefined,
         mapStack: mapCurrent ? state.mapStack : undefined,
         panelState,
         styleParams: visualCurrent ? state.styleParams : undefined,
@@ -402,16 +361,14 @@ export class ShareLinkManager {
   }
 
   /** Called by StyleManager when style/toggles change */
-  onStyleChange(styleName) {
-    this._currentStyle = styleName;
+  onStyleChange(_styleName) {
+    this._currentStyle = 'normal';
     this._scheduleUpdate();
   }
 
   onToggleChange(bloom, sharpen, extras = {}) {
-    this._bloomEnabled = bloom;
+    this._bloomEnabled = false;
     this._sharpenEnabled = sharpen;
-    if (typeof extras.bloomIntensity === 'number') this._bloomIntensity = extras.bloomIntensity;
-    if (typeof extras.bloomVersion === 'number') this._bloomVersion = extras.bloomVersion;
     if (typeof extras.sharpenIntensity === 'number') this._sharpenIntensity = extras.sharpenIntensity;
     if (typeof extras.hudVariant === 'string') this._hudVariant = extras.hudVariant;
     if (typeof extras.hudVisible === 'boolean') this._hudVisible = extras.hudVisible;
@@ -430,14 +387,6 @@ export class ShareLinkManager {
       );
     }
     if (typeof extras.celestialRingEnabled === 'boolean') this._celestialRingEnabled = extras.celestialRingEnabled;
-    if (typeof extras.scopeEnabled === 'boolean') this._scopeEnabled = extras.scopeEnabled;
-    if (typeof extras.scopeFeatherPct === 'number') {
-      this._scopeFeatherPct = Math.max(0, Math.min(100, Math.round(extras.scopeFeatherPct)));
-    }
-    if (extras.scopeTerminusPct === null) this._scopeTerminusPct = null;
-    else if (typeof extras.scopeTerminusPct === 'number') {
-      this._scopeTerminusPct = clampScopeTerminusPct(extras.scopeTerminusPct);
-    }
     if (typeof extras.mapStack === 'string') this._mapStack = extras.mapStack;
     this._scheduleUpdate();
   }
@@ -486,10 +435,7 @@ export class ShareLinkManager {
     params.set('pitch', Math.round(Cesium.Math.toDegrees(camera.pitch)).toString());
     params.set('roll', Math.round(Cesium.Math.toDegrees(camera.roll)).toString());
     params.set('style', STYLE_TO_URL[this._currentStyle] || 'normal');
-    params.set('bloom', this._bloomEnabled ? '1' : '0');
     params.set('sharpen', this._sharpenEnabled ? '1' : '0');
-    params.set('bi', Math.round(this._bloomIntensity).toString());
-    params.set('bv', Math.round(this._bloomVersion).toString());
     params.set('si', Math.round(this._sharpenIntensity).toString());
     params.set('hud', this._hudVariant);
     params.set('hv', this._hudVisible ? '1' : '0');
@@ -499,23 +445,10 @@ export class ShareLinkManager {
     params.set('kf', Math.round(this._detectionFadePct).toString());
     params.set('ko', Math.round(this._detectionOutsideOpacityPct).toString());
     params.set('cr', this._celestialRingEnabled ? '1' : '0');
-    params.set('sc', this._scopeEnabled ? '1' : '0');
-    params.set('scf', Math.round(this._scopeFeatherPct).toString());
-    // Only written when pinned — an absent `sce` IS the adaptive default, so a
-    // shared link never freezes the ramp for the recipient by accident. The
-    // same 94..100 clamp applies on the way OUT, so a link can never carry an
-    // unsupported terminus even if the field was set from somewhere else.
-    const terminusPct = clampScopeTerminusPct(this._scopeTerminusPct);
-    if (terminusPct != null) params.set('sce', String(terminusPct));
     params.set('map', this._mapStack);
     const layerState = this._layerStateProvider?.();
     if (layerState) encodeLayerStateParams(params, layerState);
     this._encodePanelStateParam(params, this._panelStateProvider?.());
-    encodeStyleParamState(
-      params,
-      this._currentStyle,
-      this._styleParamStateProvider?.(this._currentStyle),
-    );
 
     // Copy-time metadata is intentionally absent here. `copyLink()` adds a
     // fresh timestamp to its ephemeral URL without aging the live address.

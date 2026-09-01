@@ -21,15 +21,17 @@ function realtimeTools() {
   return new Function(`return ${literal};`)();
 }
 
-test('Realtime schema exposes the authoritative 28-tool inventory', () => {
+test('Realtime schema exposes the authoritative 26-tool inventory', () => {
   const tools = realtimeTools();
-  assert.equal(tools.length, 28);
+  assert.equal(tools.length, 26);
   const names = tools.map((tool) => tool.name);
-  assert.equal(new Set(names).size, 28, 'tool names are unique');
+  assert.equal(new Set(names).size, 26, 'tool names are unique');
   assert.ok(names.includes('set_context_mode'));
   assert.ok(names.includes('control_cockpit'));
   assert.ok(names.includes('select_nearest_aircraft'));
   assert.ok(names.includes('control_radio'));
+  assert.ok(!names.includes('set_visual_style'));
+  assert.ok(!names.includes('control_scene'));
   // Every tool closes its parameter object: an open schema lets the model
   // invent arguments the runner silently drops.
   for (const tool of tools) {
@@ -141,7 +143,7 @@ test('the edited existing tools changed exactly as intended', () => {
   const panel = byName.get('set_panel_open');
   assert.deepEqual(
     panel.parameters.properties.panelId.enum,
-    ['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'scene-panel', 'pp-toggles', 'global-context-panel'],
+    ['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'pp-toggles', 'global-context-panel'],
   );
   assert.deepEqual(panel.parameters.required, ['panelId', 'open']);
 
@@ -174,16 +176,17 @@ test('no unchanged Realtime tool definition drifts silently', () => {
     'fly_to_location',
     'select_nearest_aircraft',
     'set_map_stack',
+    'set_post_processing',
   ]);
   const unchanged = realtimeTools()
     .filter((tool) => !TOUCHED.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
-  assert.equal(unchanged.length, 21);
+  assert.equal(unchanged.length, 18);
   const digest = createHash('sha256')
     .update(JSON.stringify(unchanged))
     .digest('hex')
     .slice(0, 16);
-  assert.equal(digest, '802ed694b8887b88', 'an unchanged Realtime tool definition drifted');
+  assert.equal(digest, '6d67db3d02327ec1', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {
@@ -244,12 +247,10 @@ test('Radio is nested inside Context with separate disclosure and power controls
   assert.match(css, /\.radio-tuner\.is-dragging \.radio-tuner-needle,[\s\S]*?\.radio-tuner\.is-dragging \.radio-tuner-tick\s*\{\s*transition: none;/);
   assert.match(css, /\.radio-tuner\s*\{[\s\S]*?max-width: 100%;[\s\S]*?overflow: hidden;/);
   assert.match(css, /#radio-tuner-slider\s*\{[\s\S]*?max-width: 100%;[\s\S]*?touch-action: none;/);
-  assert.match(css, /#title-bar\.radio-broadcasting \.title-logo::before/);
-  assert.match(css, /#title-bar\.radio-broadcasting \.title-logo::after/);
-  assert.match(css, /--radio-broadcast-opacity: \.17/);
+  assert.doesNotMatch(css, /radio-broadcast-opacity/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.radio-tuner-needle,[\s\S]*?\.radio-tuner-tick\s*\{\s*transition: none;/);
   assert.doesNotMatch(ui, /_radioTunerCameraRemove = this\.viewer\?\.camera\?\.changed/);
-  assert.match(ui, /classList\.toggle\('radio-broadcasting', state\.audioState === 'playing'\)/);
+  assert.doesNotMatch(ui, /radio-broadcasting/);
   assert.match(ui, /cycleStation\(direction, \{[\s\S]*?rotate,[\s\S]*?stationIds:/);
   const cycleStart = ui.indexOf('const cycleRadio = (direction, { rotate = true } = {}) =>');
   const cycleMethod = ui.slice(cycleStart, ui.indexOf('const toggleRadio', cycleStart));
@@ -259,7 +260,6 @@ test('Radio is nested inside Context with separate disclosure and power controls
   assert.match(ui, /previewTuningStation\(station\?\.id \|\| null, \{ rotate \}\)/);
   assert.match(ui, /tunerPreview\(\{ coordinate: this\._radioTunerCoordinate, rotate: commit \}\)/);
   assert.match(ui, /radioLayer\.cancelTuning\(\)/);
-  assert.match(ui, /classList\.remove\('radio-broadcasting'\)/);
   assert.match(ui, /radioLayer\.getTunerStations\(750\)/);
   assert.match(ui, /radioTunerPointerPosition\(/);
   assert.doesNotMatch(css, /#right-context-rail\s*>\s*#radio-panel/);

@@ -221,7 +221,6 @@ export async function runFirstRunChoice(choice, {
  */
 export const EXCLUSIVE_SURFACE_CLASSES = Object.freeze([
   'cockpit-mode',
-  'scene-playback-mode',
   'recording-mode',
   'ui-clean-view',
 ]);

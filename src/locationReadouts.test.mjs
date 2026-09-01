@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ui = fs.readFileSync(path.join(ROOT, 'src', 'ui.js'), 'utf8');
-const director = fs.readFileSync(path.join(ROOT, 'src', 'scenes', 'director.js'), 'utf8');
 
 /** Source of the free-text LOCATION search handler (Enter on #location-search). */
 function locationSearchHandler() {
@@ -17,16 +16,10 @@ function locationSearchHandler() {
   return ui.slice(start, end);
 }
 
-test('the ACTIVE STYLE indicator is written from the style name and nothing else', () => {
-  // A free-text location search used to write the searched CITY into the
-  // top-right style slot, so the corner read "ACTIVE STYLE / TOKYO".
-  const writes = [...ui.matchAll(/this\._styleIndicator\.textContent\s*=/g)];
-  assert.equal(writes.length, 1, 'the style indicator must have exactly one writer');
-  assert.match(
-    ui.slice(writes[0].index, writes[0].index + 160),
-    /this\._styleIndicator\.textContent = displayNames\[styleName\] \|\| styleName\.toUpperCase\(\);/,
-  );
-
+test('the retired ACTIVE STYLE indicator cannot be revived by location search', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /active-style-name|style-indicator/);
+  assert.doesNotMatch(ui, /_styleIndicator/);
   const handler = locationSearchHandler();
   assert.doesNotMatch(handler, /_styleIndicator/, 'location search must not touch the style indicator');
   assert.doesNotMatch(handler, /active-style-name/, 'location search must not touch the style indicator');
@@ -102,14 +95,4 @@ test('a deferred lookup that never flies leaves the readout standing', () => {
   const policy = fs.readFileSync(path.join(ROOT, 'src', 'navigationPolicy.js'), 'utf8');
   const fn = policy.slice(policy.indexOf('export function reassertNavigationHandoff'));
   assert.match(fn, /if \(disposed \|\| generation !== currentGeneration\) return false;[\s\S]*?release\?\.\(\);/);
-});
-
-test('scene playback invalidates the search label on every shot', () => {
-  // The director drives viewer.camera itself and never reaches _stampNavigation.
-  const start = director.indexOf('  async _flyCamera(cameraState, durationSec, token) {');
-  assert.ok(start > 0, 'scene camera flight is missing');
-  assert.match(
-    director.slice(start, start + 700),
-    /this\.styleManager\?\.clearSearchedLocation\?\.\(\);/,
-  );
 });

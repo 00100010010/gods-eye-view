@@ -82,7 +82,7 @@ test('share-link serialization emits the current celestial state', () => {
   assert.equal(new URLSearchParams(window.location.hash.slice(1)).get('cr'), '1');
 });
 
-test('generated links are v2 and include deterministic layers, options, style params, and panels', () => {
+test('generated links are v2 and include deterministic layers, options, and panels', () => {
   const manager = makeManager();
   const layers = createDefaultLayerState();
   layers.enabledLayerIds = ['cctv', 'radio'];
@@ -102,7 +102,11 @@ test('generated links are v2 and include deterministic layers, options, style pa
   const params = new URLSearchParams(window.location.hash.slice(1));
   assert.equal(params.get('v'), '2');
   assert.equal(params.get('l'), 'c.r');
-  assert.equal(params.get('sp'), 's.82_b.37_m.100_p.260_a.100');
+  assert.equal(params.get('style'), 'normal');
+  assert.equal(params.get('sp'), null);
+  assert.equal(params.get('bloom'), null);
+  assert.equal(params.get('bi'), null);
+  assert.equal(params.get('bv'), null);
   assert.equal(params.get('ui'), 'c.c.0_c.p.1_m.c.1');
 });
 
@@ -111,7 +115,7 @@ test('visual parameters, explicit empty layers, and panel state are v2-only', ()
     '#v=2&lat=10&lon=20&style=flir&l=&sp=s.82_b.37_p.260&ui=c.c.0_c.p.1_d.c.1_d.p.1',
   ).parseInitialHash();
   assert.deepEqual(parsed.layerState.enabledLayerIds, []);
-  assert.deepEqual(parsed.styleParams, { sensitivity: 0.82, bloom: 0.37, pixelation: 2.6 });
+  assert.equal(parsed.styleParams, null);
   assert.deepEqual(parsed.panelState, { specs: [
     { id: 'control-panel', collapsed: false, pinned: true },
     { id: 'data-panel', collapsed: true, pinned: null },
@@ -285,52 +289,6 @@ test('keyhole fade controls default and round-trip as normalized percentages', (
   assert.equal(params.get('ko'), '30');
 });
 
-// ── `sce` is a BAND, not a free number (review round 2) ───────────────────────
-//
-// The terminus is documented and supported as 94..100. Parsing clamped to
-// 0..100, so `sce=0` produced an unsupported sub-94 terminus — a hole in the
-// mask, not a scope — and the next hash write serialized it straight back out.
-
-test('sce is clamped into the supported 94..100 band on the way in', () => {
-  assert.equal(makeManager('#lat=10&lon=20&sce=97').parseInitialHash().scopeTerminusPct, 97);
-  assert.equal(makeManager('#lat=10&lon=20&sce=94').parseInitialHash().scopeTerminusPct, 94);
-  assert.equal(makeManager('#lat=10&lon=20&sce=100').parseInitialHash().scopeTerminusPct, 100);
-  assert.equal(makeManager('#lat=10&lon=20&sce=0').parseInitialHash().scopeTerminusPct, 94,
-    'sce=0 must not create a sub-94 terminus');
-  assert.equal(makeManager('#lat=10&lon=20&sce=93').parseInitialHash().scopeTerminusPct, 94);
-  assert.equal(makeManager('#lat=10&lon=20&sce=-40').parseInitialHash().scopeTerminusPct, 94);
-  assert.equal(makeManager('#lat=10&lon=20&sce=500').parseInitialHash().scopeTerminusPct, 100);
-  assert.equal(makeManager('#lat=10&lon=20&sce=96.6').parseInitialHash().scopeTerminusPct, 97,
-    'fractional percents round into the band');
-});
-
-test('an absent or non-numeric sce stays adaptive, never a pinned value', () => {
-  assert.equal(makeManager('#lat=10&lon=20').parseInitialHash().scopeTerminusPct, null);
-  assert.equal(makeManager('#lat=10&lon=20&sce=abc').parseInitialHash().scopeTerminusPct, null,
-    'junk is not a pin — absent semantics win');
-  assert.equal(makeManager('#lat=10&lon=20&sce=').parseInitialHash().scopeTerminusPct, null);
-});
-
-test('serialization writes only in-band sce values, and omits an adaptive one', () => {
-  const manager = makeManager();
-  manager.onToggleChange(false, false, { scopeTerminusPct: 0 });
-  clearTimeout(manager._debounceTimer);
-  manager._updateHash();
-  assert.equal(new URLSearchParams(window.location.hash.slice(1)).get('sce'), '94',
-    'an out-of-band value must be floored on write, not round-tripped');
-
-  manager.onToggleChange(false, false, { scopeTerminusPct: 500 });
-  clearTimeout(manager._debounceTimer);
-  manager._updateHash();
-  assert.equal(new URLSearchParams(window.location.hash.slice(1)).get('sce'), '100');
-
-  manager.onToggleChange(false, false, { scopeTerminusPct: null });
-  clearTimeout(manager._debounceTimer);
-  manager._updateHash();
-  assert.equal(new URLSearchParams(window.location.hash.slice(1)).has('sce'), false,
-    'adaptive stays ABSENT so a shared link never freezes the ramp');
-});
-
 test('share-link restore forces a final stationary render for Google 3D Tiles', () => {
   const calls = { flyTo: null, setView: null, renders: 0 };
   const viewer = {
@@ -419,11 +377,7 @@ test('every explicit visual UI gesture claims restore authority before it mutate
   const gestureRoutes = [
     ["if (e.key.toLowerCase() === 'h')", "if (e.key.toLowerCase() === 'o')", 'this.hud.toggle()', 'HUD hotkey'],
     ["if (e.key.toLowerCase() === 'd')", "if (e.key.toLowerCase() === 'c')", 'cycleDetectionMode()', 'detection hotkey'],
-    ['// Bloom toggle', '// Bloom intensity slider', 'this._setBloomEnabled(', 'bloom button'],
-    ['// Bloom intensity slider', '// Sharpen toggle', 'this._setBloomIntensity(', 'bloom slider'],
-    ['// Sharpen toggle', '// Scope mask', 'this._setSharpenEnabled(', 'sharpen button'],
-    ["this._scopeBtn?.addEventListener('click'", "this._scopeFeatherSlider?.addEventListener('input'", 'setScopeMaskEnabled(', 'scope button'],
-    ["this._scopeFeatherSlider?.addEventListener('input'", 'if (this._sharpenSlider)', 'setScopeMaskFeather(', 'scope feather slider'],
+    ['// Sharpen toggle', 'if (this._sharpenSlider)', 'this._setSharpenEnabled(', 'sharpen button'],
     ["this._sharpenSlider.addEventListener('input'", 'if (this._hudLayoutSelect)', 'this._applySharpenIntensity(', 'sharpen slider'],
     ["this._hudLayoutSelect.addEventListener('change'", 'if (this._cleanViewBtn)', 'this._setHudVariant(', 'HUD layout select'],
     ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this._applyDetectionDensityFromUi()', 'detection density slider'],
@@ -548,7 +502,6 @@ test('every explicit visual control facade claims restore authority before mutat
     ['  setHudVisible(mode) {', '  setHudLayout(variantName) {', 'this.hud.setMode(', 'setHudVisible'],
     ['  setHudLayout(variantName) {', '  getDetectionState() {', 'this._setHudVariant(', 'setHudLayout'],
     ['  setDetection({ enabled, mode, densityPct, allocationStrategy, fadePct, outsideOpacityPct } = {}) {', '  async setMapStack(stackId) {', 'this._setDetectionAllocation(', 'setDetection'],
-    ['  setBloom({ enabled, intensityPct } = {}) {', '  setSharpen({ enabled, intensityPct } = {}) {', 'this._setBloomIntensity(', 'setBloom'],
     ['  setSharpen({ enabled, intensityPct } = {}) {', '  get celestialRingEnabled() {', 'this._applySharpenIntensity(', 'setSharpen'],
     ['  setCelestialRingEnabled(enabled, { syncShare = true, focus = false } = {}) {', '  setOrbit(enabled) {', 'this.celestialRing?.setEnabled(', 'setCelestialRingEnabled'],
   ];
@@ -571,11 +524,6 @@ test('public visual facades reject the complete invalid request before authority
         '  async setMapStack(stackId) {',
       ),
       validations: ['enabled !== undefined', 'Invalid outside opacity'],
-    },
-    {
-      label: 'setBloom',
-      block: sourceBlock('  setBloom({ enabled, intensityPct } = {}) {', '  setSharpen({ enabled, intensityPct } = {}) {'),
-      validations: ['Invalid bloom enabled value', 'Invalid bloom intensity'],
     },
     {
       label: 'setSharpen',

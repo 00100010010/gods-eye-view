@@ -3,7 +3,6 @@ const MOBILE_PANEL_IDS = Object.freeze([
   'data-panel',
   'global-context-panel',
   'control-panel',
-  'scene-panel',
   'pp-toggles',
   'cctv-panel',
 ]);
@@ -102,8 +101,6 @@ export function initMobileNavigation({ styleManager, documentRef = document } = 
   backdrop.addEventListener('click', closeAll);
 
   const actionTargets = {
-    clear: 'clear-selected-layers',
-    share: 'share-btn',
     reset: 'reset-globe-view',
   };
   const actionButtons = [...menu.querySelectorAll('[data-mobile-action]')];

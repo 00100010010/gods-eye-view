@@ -17,7 +17,6 @@ import militaryAwarenessLayer from './data/militaryAwareness.js';
 import localDataLayers from './data/localLayers.js';
 import { LAYER_STATE_REGISTRY } from './data/layerState.js';
 import { registerDataCredits } from './data/dataCredits.js';
-import { SceneDirector } from './scenes/director.js';
 import { initGevVoiceCommands } from './voice/gevRealtime.js';
 import { MapStackController } from './mapStackController.js';
 import { initAnnotations } from './annotations/index.js';
@@ -30,12 +29,12 @@ import {
   holdContinuousRender,
   releaseContinuousRender,
 } from './renderGovernor.js';
-import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
 import { initMobileNavigation } from './mobileNavigation.js';
 import { installCesiumSessionRecovery } from './sessionRecovery.js';
+import { installTrackpadOrientation } from './trackpadOrientation.js';
 
 initLogoGaze();
 
@@ -129,6 +128,7 @@ async function init() {
       },
     });
     installCesiumSessionRecovery(viewer);
+    installTrackpadOrientation(viewer);
 
     // Cap the default render loop at 60 fps. Cesium's loop otherwise runs at
     // the display's refresh rate — 120 Hz on ProMotion panels — doubling GPU
@@ -277,9 +277,6 @@ async function init() {
     dataManager.buildTogglePanel(document.getElementById('data-toggles'));
     styleManager.attachDataManager(dataManager);
 
-    // Initialize deterministic scene playback for social clip capture
-    const sceneDirector = new SceneDirector(viewer, styleManager, dataManager);
-
     // Initialize the voice "whiteboard" annotation engine (world-space renderer)
     const annotations = initAnnotations({ viewer, tileset });
 
@@ -312,11 +309,6 @@ async function init() {
     // nothing animates per frame. Installed AFTER every module above has had
     // its chance to register pre-install holds. (perf wave 2)
     installRenderGovernor(viewer);
-
-    // The explicit scope mask replaces the emergent six-pass artifact —
-    // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
-    // toggle finds it live.
-    installScopeMask(viewer);
 
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)
@@ -353,7 +345,6 @@ async function init() {
       styleManager,
       tileset,
       dataManager,
-      sceneDirector,
       mapStackController,
       annotations,
       weatherEffects,
@@ -361,7 +352,7 @@ async function init() {
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };
-    window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
+    window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, annotations });
     window.__godsEyeView.mobileNavigation = initMobileNavigation({ styleManager });
 
   } catch (error) {

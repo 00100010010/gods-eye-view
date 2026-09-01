@@ -20,7 +20,7 @@ test('LOCATION exposes an accessible, explicit device-location action', () => {
 });
 
 test('both command-dock trays expose a tactile close action', () => {
-  assert.match(html, /data-dock-close-target="control-panel"[^>]*aria-label="Close visual presets"/);
+  assert.match(html, /data-dock-close-target="control-panel"[^>]*aria-label="Close map sources"/);
   assert.match(html, /data-dock-close-target="location-bar"[^>]*aria-label="Close location tray"/);
   assert.match(ui, /this\._setCommandDockPanelPinState\(panelId, false, \{ syncShare: false \}\);/);
   assert.match(ui, /this\.setPanelCollapsed\(panelId, true, \{ explicit: true \}\);/);

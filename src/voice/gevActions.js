@@ -21,7 +21,6 @@ import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js'
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
 
-const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
 const PANEL_ALIASES = new Map([
   ['data', 'data-panel'],
   ['data layers', 'data-panel'],
@@ -30,9 +29,6 @@ const PANEL_ALIASES = new Map([
   ['data layer menu', 'data-panel'],
   ['locations', 'location-bar'],
   ['location', 'location-bar'],
-  ['styles', 'control-panel'],
-  ['filters', 'control-panel'],
-  ['visual styles', 'control-panel'],
   ['cctv', 'cctv-panel'],
   ['cameras', 'cctv-panel'],
   ['radio', 'radio-panel'],
@@ -43,8 +39,6 @@ const PANEL_ALIASES = new Map([
   ['global context', 'global-context-panel'],
   ['right context', 'global-context-panel'],
   ['context right panel', 'global-context-panel'],
-  ['scenes', 'scene-panel'],
-  ['scene', 'scene-panel'],
   ['post processing', 'pp-toggles'],
   ['hud controls', 'pp-toggles'],
   ['map stack', 'control-panel'],
@@ -54,7 +48,7 @@ const PANEL_ALIASES = new Map([
   ['sources', 'control-panel'],
 ]);
 
-const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'scene-panel', 'pp-toggles']);
+const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'pp-toggles']);
 const CONTEXT_MODE_ALIASES = new Map([
   ['off', 'off'],
   ['none', 'off'],
@@ -287,7 +281,7 @@ export function readLayerLifecycleSummary(dataManager, layerId, { fallbackEnable
   };
 }
 
-export function createGevActionRunner({ viewer, styleManager, dataManager, sceneDirector = null, annotations = null }) {
+export function createGevActionRunner({ viewer, styleManager, dataManager, annotations = null }) {
   installViewTargetPrewarm(viewer);
   initCameraVerbs(viewer, getViewTargetCartesian);
   return async function runGevAction(name, rawArgs = {}, runOptions = {}) {
@@ -572,13 +566,6 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
       };
     }
 
-    if (name === 'set_visual_style') {
-      const style = normalizeStyle(args.style);
-      if (!style) throw new Error(`Unknown visual style: ${args.style || 'missing'}`);
-      styleManager.setStyle(style);
-      return { ok: true, action: 'set_visual_style', style };
-    }
-
     if (name === 'set_panel_open') {
       const panelId = normalizePanelId(args.panelId || args.panel);
       if (!panelId) throw new Error(`Unknown panel: ${args.panelId || args.panel || 'missing'}`);
@@ -838,7 +825,7 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'get_current_view_state') {
-      return getCurrentViewState(viewer, styleManager, dataManager, sceneDirector);
+      return getCurrentViewState(viewer, styleManager, dataManager);
     }
 
     if (name === 'set_hud') {
@@ -875,12 +862,6 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
 
     if (name === 'set_post_processing') {
       const out = { ok: true, action: 'set_post_processing' };
-      if (args.bloom && typeof args.bloom === 'object') {
-        Object.assign(out, styleManager.setBloom({
-          enabled: typeof args.bloom.enabled === 'boolean' ? args.bloom.enabled : undefined,
-          intensityPct: Number.isFinite(Number(args.bloom.intensityPct)) ? Number(args.bloom.intensityPct) : undefined,
-        }));
-      }
       if (args.sharpen && typeof args.sharpen === 'object') {
         Object.assign(out, styleManager.setSharpen({
           enabled: typeof args.sharpen.enabled === 'boolean' ? args.sharpen.enabled : undefined,
@@ -888,10 +869,6 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
         }));
       }
       return out;
-    }
-
-    if (name === 'control_scene') {
-      return controlScene(sceneDirector, args);
     }
 
     if (name === 'control_cctv') {
@@ -1046,46 +1023,6 @@ export function normalizeStackId(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
   return STACK_ALIASES.get(raw) || null;
-}
-
-/**
- * Voice scene playback control. Playback is fire-and-forget: startScene
- * sequences shots for minutes and must not block the realtime tool loop.
- */
-function controlScene(sceneDirector, args = {}) {
-  if (!sceneDirector) {
-    return { ok: false, action: 'control_scene', error: 'Scene director unavailable' };
-  }
-  const sceneAction = String(args.action || '').toLowerCase();
-
-  if (sceneAction === 'list') {
-    return { ok: true, action: 'control_scene', scenes: sceneDirector.listScenes(), ...sceneDirector.getPlaybackStatus() };
-  }
-  if (sceneAction === 'status') {
-    return { ok: true, action: 'control_scene', ...sceneDirector.getPlaybackStatus() };
-  }
-  if (sceneAction === 'stop') {
-    sceneDirector.stopScene('Stopped by voice');
-    return { ok: true, action: 'control_scene', running: false };
-  }
-  if (sceneAction === 'next') {
-    sceneDirector.runNextScene();
-    return { ok: true, action: 'control_scene', advanced: true };
-  }
-  if (sceneAction === 'play') {
-    if (sceneDirector.running) {
-      return { ok: false, action: 'control_scene', error: 'A scene is already running — stop it first' };
-    }
-    const scene = args.sceneId
-      ? sceneDirector.findSceneByQuery(args.sceneId)
-      : (sceneDirector.listScenes()[0] || null);
-    if (!scene) {
-      return { ok: false, action: 'control_scene', error: `No scene matched "${args.sceneId || ''}"`, scenes: sceneDirector.listScenes() };
-    }
-    void sceneDirector.startScene(scene.id, { single: true });
-    return { ok: true, action: 'control_scene', playing: scene.title, shots: scene.shots };
-  }
-  throw new Error(`Unknown scene action: ${args.action || 'missing'}`);
 }
 
 /** Voice CCTV control over the cctv layer module's public surface. */
@@ -2196,15 +2133,6 @@ function focusDataLayerRow(layerId) {
 }
 
 
-function normalizeStyle(value) {
-  const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'filter off' || raw === 'off' || raw === 'default') return 'normal';
-  if (raw === 'night vision' || raw === 'nvg') return 'surveillance';
-  if (raw === 'flir') return 'thermal';
-  if (ALLOWED_STYLES.has(raw)) return raw;
-  return null;
-}
-
 async function flyToRequestedLocation(viewer, args, {
   onStart = null,
   runImmediate = null,
@@ -2354,7 +2282,7 @@ function normalizeLocationId(value) {
   return null;
 }
 
-function getCurrentViewState(viewer, styleManager, dataManager, sceneDirector = null) {
+function getCurrentViewState(viewer, styleManager, dataManager) {
   const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.positionWC);
   return {
     ok: true,
@@ -2377,7 +2305,6 @@ function getCurrentViewState(viewer, styleManager, dataManager, sceneDirector = 
       ? styleManager.getCockpitState()
       : null,
     controls: typeof styleManager.getControlState === 'function' ? styleManager.getControlState() : null,
-    scenePlayback: sceneDirector?.getPlaybackStatus?.() || null,
     tracked: collectTrackedEntities(dataManager),
     layers: dataManager.getAll().map((layer) => ({
       id: layer.id,

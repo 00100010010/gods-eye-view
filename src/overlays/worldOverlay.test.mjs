@@ -308,9 +308,9 @@ function installMockEnvironment({
   root.appendChild(canvas);
   if (occluderRect) {
     const title = new MockElement('div');
-    title.id = 'title-bar';
+    title.id = 'top-center-actions';
     title._rect = occluderRect;
-    Object.assign(title.style, shippedStacking('#title-bar'));
+    Object.assign(title.style, shippedStacking('#top-center-actions'));
     body.appendChild(title);
   }
   // Named chrome fixtures. Every fixture declares whether its selector is

@@ -169,15 +169,6 @@ import {
 import { sampleMeshFloorCells } from './data/meshFloorSampler.js';
 import { holdContinuousRender, releaseContinuousRender, governorRequestRender } from './renderGovernor.js';
 import {
-  setScopeMaskEnabled,
-  isScopeMaskEnabled,
-  setScopeMaskFeather,
-  getScopeMaskFeather,
-  setScopeTerminusOverride,
-  getScopeTerminusOverride,
-  clampScopeTerminusPct,
-} from './scopeMask.js';
-import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -217,7 +208,6 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'data-panel' },
   { id: 'cctv-panel' },
   { id: 'radio-panel' },
-  { id: 'scene-panel' },
   { id: 'global-context-panel' },
   { id: 'pp-toggles' },
   { id: 'param-slider-panel' },
@@ -226,7 +216,6 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
 const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
   'data-panel',
   'cctv-panel',
-  'scene-panel',
   'pp-toggles',
   'global-context-panel',
   'radio-panel',
@@ -293,8 +282,6 @@ const COCKPIT_BRIEF_PAGES = [
 const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-hud .cockpit-topline',
   '#cockpit-hud .cockpit-topline > div',
-  '#title-bar',
-  '#style-indicator',
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
@@ -344,8 +331,6 @@ function isRenderedOnScreen(element) {
 const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-hud .cockpit-topline',
   '#cockpit-hud .cockpit-topline > div',
-  '#title-bar',
-  '#style-indicator',
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
@@ -2224,7 +2209,6 @@ export class StyleManager {
     this._draggableResizeObserver = null;
 
     // DOM refs
-    this._styleIndicator = document.getElementById('active-style-name');
     this._sliderPanel = document.getElementById('param-slider-panel');
     this._sliderContainer = document.getElementById('param-sliders');
     this._ppToggles = document.getElementById('pp-toggles');
@@ -2259,16 +2243,12 @@ export class StyleManager {
     } catch { /* storage can be unavailable in privacy/test contexts */ }
     this._detectionAllocationPreference = normalizeAllocationStrategy(storedDetectionAllocation);
     this._celestialBtn = document.getElementById('celestial-toggle');
-    this._scopeBtn = document.getElementById('scope-toggle');
-    this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
-    this._scopeFeatherValue = document.getElementById('scope-feather-value');
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._mapStackChangeHandler = null;
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
-    this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
     this._contextRadioDock = document.getElementById('context-radio-dock');
@@ -2361,7 +2341,6 @@ export class StyleManager {
     this._cctvSourceBadge = document.getElementById('cctv-source-badge');
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
-    this._shareBtn = document.getElementById('share-btn');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2382,7 +2361,6 @@ export class StyleManager {
     this._locationPills = document.getElementById('location-pills');
     this._poiRow = document.getElementById('poi-row');
     this._locationBarDivider = document.getElementById('location-bar-divider');
-    this._styleMiniValue = document.getElementById('style-mini-value');
     this._locationMiniCity = document.getElementById('location-mini-city');
     this._locationMiniPoi = document.getElementById('location-mini-poi');
     this._safeFrameOverlay = document.getElementById('safe-frame-overlay');
@@ -2497,16 +2475,14 @@ export class StyleManager {
           detectionFadePct,
           detectionOutsideOpacityPct,
           celestialRing,
-          scopeEnabled,
-          scopeFeatherPct,
-          scopeTerminusPct,
           mapStack,
           panelState,
           styleParams,
         } = state || {};
-        // Ignore the retired 'ai-edit' style from older share links.
-        if (style && style !== 'normal' && style !== 'ai-edit') {
-          this.setStyle(style, { applyPreset: true, revealParameters: false, restore: true });
+        // Visual presets are retired; legacy links preserve navigation and
+        // layer state but always render with the Normal presentation.
+        if (style && this.activeStyle !== 'normal') {
+          this.setStyle('normal', { applyPreset: false, revealParameters: false, restore: true });
         }
         if (styleParams && style && this.stages[style] && STYLES[style]?.uniforms) {
           for (const [uniformName, uniformValue] of Object.entries(styleParams)) {
@@ -2525,7 +2501,8 @@ export class StyleManager {
           this._sharpenSliderValue.textContent = `${pct}%`;
           this._applySharpenIntensity(pct / 100);
         }
-        if (typeof bloom === 'boolean') this._setBloomEnabled(bloom);
+        // Bloom is retired even when an older link contains bloom=1.
+        if (typeof bloom === 'boolean') this._setBloomEnabled(false);
         if (typeof sharpen === 'boolean') this._setSharpenEnabled(sharpen);
         if (hudVariant) this._setHudVariant(hudVariant);
         if (typeof hudVisible === 'boolean') {
@@ -2551,24 +2528,6 @@ export class StyleManager {
         if (detectionMode) this._setDetectionMode(detectionMode);
         if (typeof celestialRing === 'boolean') {
           this.setCelestialRingEnabled(celestialRing, { syncShare: false, focus: false });
-        }
-        if (typeof scopeEnabled === 'boolean') {
-          setScopeMaskEnabled(scopeEnabled);
-          this._scopeBtn?.classList.toggle('active', scopeEnabled);
-          this._scopeBtn?.setAttribute('aria-pressed', String(scopeEnabled));
-        }
-        if (typeof scopeFeatherPct === 'number' && this._scopeFeatherSlider) {
-          const pct = Math.max(0, Math.min(100, Math.round(scopeFeatherPct)));
-          this._scopeFeatherSlider.value = String(pct);
-          if (this._scopeFeatherValue) this._scopeFeatherValue.textContent = `${pct}%`;
-          setScopeMaskFeather(pct / 100);
-        }
-        // null restores the altitude-adaptive ramp; a number pins the terminus
-        // (clamped to the supported 94..100 band, same as the `sce` hash key).
-        if (scopeTerminusPct === null) setScopeTerminusOverride(null);
-        else if (typeof scopeTerminusPct === 'number') {
-          const pinned = clampScopeTerminusPct(scopeTerminusPct);
-          setScopeTerminusOverride(pinned == null ? null : pinned / 100);
         }
         const mapStackRestore = mapStack
           ? this._setMapStack(mapStack, { syncShare: false })
@@ -2635,7 +2594,6 @@ export class StyleManager {
     this._initCctvPanel();
     this._initGlobalContextPanel();
     this._initLocationBar();
-    this._initShareButton();
     this._initClearSelectedLayersButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
@@ -2645,7 +2603,6 @@ export class StyleManager {
     this._initRecordingOverlay();
     this._startAnimationLoop();
     this._startTrafficChipTicker();
-    this._updateStyleMiniStatus();
     this._updateLocationMiniStatus();
 
     // Restore from URL hash if present
@@ -2982,13 +2939,8 @@ export class StyleManager {
         uniforms,
       });
 
-      // Zero-intensity stages are DISABLED (perf wave 1). History: the
-      // first attempt at this deleted the product's signature scope — the
-      // circular starfield mask was an EMERGENT artifact of these six
-      // stacked "identity" passes, not an implemented feature. The owner
-      // ruled to reimplement the scope explicitly (src/scopeMask.js, a
-      // featherable zero-per-frame canvas), which frees these passes for
-      // real. If the scope ever looks wrong, look there — not here.
+      // Zero-intensity stages are disabled so inactive compatibility shaders
+      // do not consume a post-processing pass.
       stage.enabled = false;
       this.viewer.scene.postProcessStages.add(stage);
       this.stages[name] = stage;
@@ -3000,8 +2952,7 @@ export class StyleManager {
 
   /**
    * Single write path for style-stage intensity: keeps `enabled` in
-   * lockstep so zero-intensity stages cost nothing (safe now that the
-   * scope is explicit — see _initStages). The stage enables on the same
+   * lockstep so zero-intensity stages cost nothing. The stage enables on the same
    * frame the first non-zero intensity lands, so crossfades never pop.
    * @param {Cesium.PostProcessStage} stage - Style post-process stage.
    * @param {number} value - Intensity in [0, 1].
@@ -3024,9 +2975,7 @@ export class StyleManager {
    * intensity math — they write `uniforms.intensity` directly and know
    * nothing about the enabled/intensity lockstep _setStageIntensity owns.
    * Without this sweep a stage the policy raised to 1 would stay DISABLED
-   * and cockpit NVG/FLIR/CRT would render nothing at all. (Inert while the
-   * chain is permanently enabled; load-bearing again once the explicit
-   * scope frees the zero-intensity stages — see _initStages.)
+   * and a raised stage would render nothing at all.
    * @returns {void}
    */
   _syncStagesEnabledFromIntensity() {
@@ -3286,15 +3235,12 @@ export class StyleManager {
    * @param {boolean} enabled - Whether bloom should be active.
    * @returns {void}
    */
-  _setBloomEnabled(enabled) {
+  _setBloomEnabled(_enabled) {
     governorRequestRender('bloom');
-    this.bloomEnabled = !!enabled;
-    this._syncBloomStageEnabled();
-    this._bloomBtn.classList.toggle('active', this.bloomEnabled);
-    this._bloomSliderRow.classList.toggle('visible', this.bloomEnabled);
-    if (this.bloomEnabled) {
-      this._applyBloomIntensity(this._getBloomIntensity());
-    }
+    this.bloomEnabled = false;
+    if (this._bloomStage) this._bloomStage.enabled = false;
+    this._bloomBtn?.classList.remove('active');
+    this._bloomSliderRow?.classList.remove('visible');
     this._syncShareState();
     this._layoutRightPanels();
   }
@@ -3354,11 +3300,7 @@ export class StyleManager {
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
 
-      const keyMap = {
-        '1': 'normal', '2': 'retro', '3': 'surveillance',
-        '4': 'thermal', '5': 'anime', '6': 'noir',
-        '7': 'snow',
-      };
+      const keyMap = { '1': 'normal' };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
         if (this._locationSearch.classList.contains('expanded')) {
@@ -3390,40 +3332,10 @@ export class StyleManager {
     };
     document.addEventListener('keydown', this._globalKeydownHandler);
 
-    // Bloom toggle
-    this._bloomBtn.addEventListener('click', () => {
-      this.shareLinkManager?.claimRestoreLane?.('visual');
-      this._setBloomEnabled(!this.bloomEnabled);
-    });
-
-    // Bloom intensity slider
-    this._bloomSlider.addEventListener('input', () => {
-      this.shareLinkManager?.claimRestoreLane?.('visual');
-      this._setBloomIntensity(parseInt(this._bloomSlider.value, 10));
-    });
-
     // Sharpen toggle
     this._sharpenBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
       this._setSharpenEnabled(!this.sharpenEnabled);
-    });
-
-    // Scope mask — the explicit circular viewport treatment (owner ask:
-    // standalone toggle + featherable edge; see src/scopeMask.js).
-    this._scopeBtn?.addEventListener('click', () => {
-      this.shareLinkManager?.claimRestoreLane?.('visual');
-      const next = !isScopeMaskEnabled();
-      setScopeMaskEnabled(next);
-      this._scopeBtn.classList.toggle('active', next);
-      this._scopeBtn.setAttribute('aria-pressed', String(next));
-      this._syncShareState();
-    });
-    this._scopeFeatherSlider?.addEventListener('input', () => {
-      this.shareLinkManager?.claimRestoreLane?.('visual');
-      const pct = Math.max(0, Math.min(100, parseInt(this._scopeFeatherSlider.value, 10) || 0));
-      if (this._scopeFeatherValue) this._scopeFeatherValue.textContent = `${pct}%`;
-      setScopeMaskFeather(pct / 100);
-      this._syncShareState();
     });
 
     if (this._sharpenSlider) {
@@ -3857,12 +3769,6 @@ export class StyleManager {
       detectionFadePct: parseInt(this._detectionFadeSlider?.value || '7', 10),
       detectionOutsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '1', 10),
       celestialRingEnabled: this.celestialRingEnabled,
-      scopeEnabled: isScopeMaskEnabled(),
-      scopeFeatherPct: Math.round(getScopeMaskFeather() * 100),
-      // null when adaptive — the share layer omits `sce` entirely in that case.
-      scopeTerminusPct: getScopeTerminusOverride() == null
-        ? null
-        : Math.round(getScopeTerminusOverride() * 100),
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
     });
   }
@@ -5906,7 +5812,6 @@ export class StyleManager {
     const selected = state.selected || null;
     const hasStations = state.filteredCount > 0;
     const activePlayback = ['playing', 'buffering'].includes(state.audioState);
-    document.getElementById('title-bar')?.classList.toggle('radio-broadcasting', state.audioState === 'playing');
     this._radioPanel.classList.toggle('radio-enabled', enabled);
     this._radioPanel.classList.toggle('lifecycle-uncertain', uncertain);
     this._contextRadioDock?.classList.toggle('active', enabled);
@@ -7993,37 +7898,6 @@ export class StyleManager {
   }
 
   /**
-   * Controls bloom post-processing. Intensity is the UI percent (0-200).
-   * @param {object} [options]
-   * @param {boolean} [options.enabled]
-   * @param {number} [options.intensityPct] - 0-200.
-   * @returns {{ok: boolean, bloom: {enabled: boolean, intensityPct: number|null}}}
-   */
-  setBloom({ enabled, intensityPct } = {}) {
-    const current = () => ({
-      enabled: !!this.bloomEnabled,
-      intensityPct: this._bloomSlider ? parseInt(this._bloomSlider.value, 10) : null,
-    });
-    if (enabled !== undefined && typeof enabled !== 'boolean') {
-      return { ok: false, error: `Invalid bloom enabled value: ${enabled}`, bloom: current() };
-    }
-    if (intensityPct !== undefined
-      && (typeof intensityPct !== 'number' || !Number.isFinite(intensityPct))) {
-      return { ok: false, error: `Invalid bloom intensity: ${intensityPct}`, bloom: current() };
-    }
-    const hasExplicitVisualChange = intensityPct !== undefined || enabled !== undefined;
-    if (hasExplicitVisualChange) this.shareLinkManager?.claimRestoreLane?.('visual');
-    if (intensityPct !== undefined) {
-      this._setBloomIntensity(Math.round(Math.max(0, Math.min(200, intensityPct))));
-    }
-    if (enabled !== undefined) this._setBloomEnabled(enabled);
-    return {
-      ok: true,
-      bloom: current(),
-    };
-  }
-
-  /**
    * Controls sharpen post-processing. Intensity is the UI percent (0-100).
    * @param {object} [options]
    * @param {boolean} [options.enabled]
@@ -8546,10 +8420,6 @@ export class StyleManager {
       mapStack: this.mapStackController?.getActiveId?.() || null,
       hud: { visible: !!this.hud?.visible, layout: this.hud?.getVariant?.() || null },
       detection: this.getDetectionState(),
-      bloom: {
-        enabled: !!this.bloomEnabled,
-        intensityPct: this._bloomSlider ? parseInt(this._bloomSlider.value, 10) : null,
-      },
       sharpen: {
         enabled: !!this.sharpenEnabled,
         intensityPct: this._sharpenSlider ? parseInt(this._sharpenSlider.value, 10) : null,
@@ -8623,11 +8493,6 @@ export class StyleManager {
 
     return {
       style: this.activeStyle,
-      bloom: {
-        enabled: this.bloomEnabled,
-        intensity: this._getBloomIntensity(),
-        version: BLOOM_SCALE_VERSION,
-      },
       sharpen: {
         enabled: this.sharpenEnabled,
         intensity: parseInt(this._sharpenSlider?.value || '49', 10),
@@ -8642,10 +8507,6 @@ export class StyleManager {
         allocation: getDetectionTuning().allocationStrategy,
         fadePct: parseInt(this._detectionFadeSlider?.value || '7', 10),
         outsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '0', 10),
-      },
-      scope: {
-        enabled: isScopeMaskEnabled(),
-        featherPct: Math.round(getScopeMaskFeather() * 100),
       },
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
       styleParams,
@@ -8676,18 +8537,6 @@ export class StyleManager {
       this.setStyle(state.style, { applyPreset: false });
     }
 
-    const bloomState = state.bloom || {};
-    if (typeof bloomState.intensity === 'number' && this._bloomSlider) {
-      const intensity = decodeBloomIntensity(
-        bloomState.intensity,
-        bloomState.version ?? state.bloomVersion ?? BLOOM_SCALE_VERSION
-      );
-      this._setBloomIntensity(intensity, { syncShare: false });
-    }
-    if (typeof bloomState.enabled === 'boolean') {
-      this._setBloomEnabled(bloomState.enabled);
-    }
-
     const sharpenState = state.sharpen || {};
     if (typeof sharpenState.intensity === 'number' && this._sharpenSlider) {
       const pct = Math.max(0, Math.min(100, Math.round(sharpenState.intensity)));
@@ -8706,19 +8555,6 @@ export class StyleManager {
     if (typeof hudState.visible === 'boolean') {
       this.hud.setMode(hudState.visible ? 'on' : 'off');
       this._updateHudButtonState();
-    }
-
-    const scopeState = state.scope || {};
-    if (typeof scopeState.enabled === 'boolean') {
-      setScopeMaskEnabled(scopeState.enabled);
-      this._scopeBtn?.classList.toggle('active', scopeState.enabled);
-      this._scopeBtn?.setAttribute('aria-pressed', String(scopeState.enabled));
-    }
-    if (typeof scopeState.featherPct === 'number' && this._scopeFeatherSlider) {
-      const pct = Math.max(0, Math.min(100, Math.round(scopeState.featherPct)));
-      this._scopeFeatherSlider.value = String(pct);
-      if (this._scopeFeatherValue) this._scopeFeatherValue.textContent = `${pct}%`;
-      setScopeMaskFeather(pct / 100);
     }
 
     const detectionState = state.detection || {};
@@ -8804,21 +8640,6 @@ export class StyleManager {
    * @param {object} preset
    */
   applyCinematicPreset(preset = {}) {
-    const bloomInput = typeof preset.bloom === 'object' ? preset.bloom : { intensity: preset.bloom };
-    let decodedBloomIntensity = null;
-    if (typeof bloomInput.intensity === 'number') {
-      decodedBloomIntensity = decodeBloomIntensity(
-        bloomInput.intensity,
-        bloomInput.version ?? preset.bloomVersion ?? BLOOM_SCALE_VERSION
-      );
-      this._setBloomIntensity(decodedBloomIntensity, { syncShare: false });
-    }
-    if (typeof bloomInput.enabled === 'boolean') {
-      this._setBloomEnabled(bloomInput.enabled);
-    } else if (typeof bloomInput.intensity === 'number') {
-      this._setBloomEnabled((decodedBloomIntensity ?? this._getBloomIntensity()) > 0);
-    }
-
     const sharpenInput = typeof preset.sharpen === 'object' ? preset.sharpen : { enabled: preset.sharpen };
     if (typeof sharpenInput.intensity === 'number' && this._sharpenSlider) {
       const sharpenPct = Math.max(0, Math.min(100, Math.round(sharpenInput.intensity)));
@@ -9021,6 +8842,11 @@ export class StyleManager {
     revealParameters = applyPreset,
     restore = false,
   } = {}) {
+    // Alternate visual presets have been retired. Keep this compatibility
+    // entry point for legacy links and callers, but never leave Normal.
+    styleName = 'normal';
+    applyPreset = false;
+    revealParameters = false;
     if (!restore) this.shareLinkManager?.claimRestoreLane?.('visual');
     if (styleName === this.activeStyle) {
       if (revealParameters && styleName !== 'normal') this._revealStyleParameters();
@@ -9055,9 +8881,6 @@ export class StyleManager {
     });
 
     // Update style indicator
-    const displayNames = { surveillance: 'NVG', thermal: 'FLIR', retro: 'CRT' };
-    this._styleIndicator.textContent = displayNames[styleName] || styleName.toUpperCase();
-    this._updateStyleMiniStatus(styleName);
 
     // Update parameter sliders
     this._updateSliderPanel(styleName, { reveal: revealParameters });
@@ -9188,8 +9011,7 @@ export class StyleManager {
       }
 
       // Update time uniforms for animated shaders. Zero-intensity stages
-      // are disabled (see _initStages — the scope is now the explicit
-      // scopeMask canvas), so enabled === visible here; only these keep
+      // are disabled, so enabled === visible here; only these keep
       // the loop and its continuous-render hold alive.
       let animatedStageVisible = false;
       for (const [, stage] of this._stageEntries) {
@@ -9638,16 +9460,6 @@ export class StyleManager {
     this._locationMiniPoi.textContent = lines.poi;
   }
 
-  /**
-   * Updates the collapsed mini-status readout with the active style label.
-   * @param {string} [styleName=this.activeStyle] - Style name to display.
-   * @returns {void}
-   */
-  _updateStyleMiniStatus(styleName = this.activeStyle) {
-    if (!this._styleMiniValue) return;
-    this._styleMiniValue.textContent = STYLE_STATUS_LABELS[styleName] || String(styleName || 'normal').toUpperCase();
-  }
-
   // ── Orbit Mode ──────────────────────────────
 
   /**
@@ -9844,19 +9656,6 @@ export class StyleManager {
     return resetPromise;
   }
 
-  // ── Share Button ─────────────────────────────
-
-  /**
-   * Wires the share button click to copy the current share link to the clipboard.
-   * @returns {void}
-   */
-  _initShareButton() {
-    this._shareBtn.addEventListener('click', async () => {
-      const success = await this.shareLinkManager.copyLink();
-      this._showToast(success ? 'Link copied!' : 'Copy failed');
-    });
-  }
-
   /**
    * Displays a temporary toast notification for 2 seconds.
    * @param {string} message - Text to show in the toast.
@@ -9957,7 +9756,6 @@ export class StyleManager {
     // a screen reader without this. It matters more now that the button ships
     // ACTIVE from markup (default-on, 2026-08-22): the very first thing assistive
     // tech reported was an unpressed-looking control over an armed layer.
-    // Mirrors #scope-toggle, which has always carried aria-pressed.
     this._models3dBtn?.setAttribute('aria-pressed', String(this._models3dEnabled));
   }
 
@@ -10376,7 +10174,6 @@ export class StyleManager {
     this._radioTunerCameraRemove?.();
     this._radioTunerCameraRemove = null;
     this._refreshRadioTunerBand = null;
-    document.getElementById('title-bar')?.classList.remove('radio-broadcasting');
     radioLayer.endTuning();
     if (this._radioSelectedHandler) {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);

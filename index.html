@@ -25,27 +25,8 @@
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
   </div>
 
-  <!-- Title -->
-  <div id="title-bar">
-    <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span> <span>GOD'S EYE <span class="title-accent">VIEW</span></span></h1>
-    <p class="subtitle">NO PLACE LEFT BEHIND</p>
-  </div>
-
-  <!-- Style indicator -->
-  <div id="style-indicator">
-    <span class="indicator-label">ACTIVE STYLE</span>
-    <span class="indicator-value" id="active-style-name">NORMAL</span>
-  </div>
-
-  <!-- Top-center camera and share actions -->
+  <!-- Top-center camera actions -->
   <nav id="top-center-actions" aria-label="Globe actions">
-    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
-      <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
-    </button>
-    <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
-      <span class="share-icon" aria-hidden="true">&#x1F517;</span>
-    </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
@@ -159,20 +140,6 @@
         <span class="cockpit-kicker">FIRST PERSON</span>
         <strong id="cockpit-callsign">AIRCRAFT</strong>
         <span id="cockpit-aircraft-meta" class="cockpit-aircraft-meta">LIVE TRACK · COURSE ALIGNED</span>
-      </div>
-      <div class="cockpit-vision-controls" role="group" aria-label="Cockpit vision style">
-        <button id="cockpit-vision-previous" class="cockpit-vision-nav" type="button" aria-label="Previous cockpit vision style" title="Previous vision style">
-          <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
-          <small>PREV</small>
-        </button>
-        <button id="cockpit-vision-current" class="cockpit-vision-current" type="button" data-cockpit-vision="optical" aria-label="Current cockpit vision style: NORMAL. Activate for next style." title="Current style: NORMAL — click for next">
-          <small>CURRENT</small>
-          <strong id="cockpit-vision-current-label" aria-live="polite">NORMAL</strong>
-        </button>
-        <button id="cockpit-vision-next" class="cockpit-vision-nav" type="button" aria-label="Next cockpit vision style" title="Next vision style">
-          <small>NEXT</small>
-          <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
-        </button>
       </div>
     </div>
     <div class="cockpit-reticle material-symbols-outlined" aria-hidden="true">my_location</div>
@@ -430,10 +397,8 @@
       <div id="param-sliders"></div>
     </div>
     <div class="pp-toggle-group">
-      <!-- 3D aircraft is DEFAULT-ON in Proximity (owner directive 2026-08-22), so the
-           button ships lit and the mode row ships open — the same markup-carries-the-default
-           convention as #scope-toggle. ui.js re-syncs both from durable layer state, which
-           is what flips them back for a share link or a stored session carrying 3D off. -->
+      <!-- 3D aircraft is DEFAULT-ON in Proximity. ui.js re-syncs this control
+           from durable layer state when an older shared view is restored. -->
       <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="3D aircraft — flat icons zoomed out, 3D models up close">
         <span class="pp-icon">&#x2708;</span>
         <span class="pp-label">3D</span>
@@ -447,22 +412,6 @@
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn active" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="true">
-        <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
-        <span class="pp-label">Scope</span>
-      </button>
-      <div class="pp-slider-row visible" id="scope-slider-row">
-        <span class="pp-slider-mini-label">Feather</span>
-        <!-- Feather starts at an 11% soft scope-mask edge (owner final lock
-             2026-08-24, superseding the 08-22 hard-crop and 08-23 8% rulings);
-             mirrors SCOPE_FEATHER_RATIO_DEFAULT in src/scopeMask.js. Feather
-             softens the black mask edge; label fading is the separate Fade
-             slider. -->
-        <input type="range" class="pp-slider" id="scope-feather-slider" min="0" max="100" value="11" title="Scope edge feather as a percentage of the keyhole radius" />
-        <span class="pp-slider-value" id="scope-feather-value">11%</span>
-      </div>
-    </div>
-    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">flare</span>
         <span class="pp-label">Celestial</span>
@@ -472,16 +421,6 @@
       <span class="pp-icon">&#x25A1;</span>
       <span class="pp-label">Clean UI</span>
     </button>
-    <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="bloom-toggle" title="Bloom / Glow">
-        <span class="pp-icon">&#x2728;</span>
-        <span class="pp-label">Bloom</span>
-      </button>
-      <div class="pp-slider-row" id="bloom-slider-row">
-        <input type="range" class="pp-slider" id="bloom-intensity-slider" min="0" max="200" value="0" />
-        <span class="pp-slider-value" id="bloom-intensity-value">0%</span>
-      </div>
-    </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="sharpen-toggle" title="Sharpening">
         <span class="pp-icon">&#x1F50D;</span>
@@ -495,58 +434,21 @@
   </div>
   <button id="clean-view-exit" title="Return UI controls">EXIT CLEAN VIEW</button>
 
-  <!-- Unified bottom command dock: locations, voice (injected at runtime), visual presets -->
-  <div id="command-dock" aria-label="Navigation, voice, and visual preset controls">
+  <!-- Unified bottom command dock: locations, voice (injected at runtime), map sources -->
+  <div id="command-dock" aria-label="Navigation, voice, and map source controls">
   <!-- Control panel -->
   <div id="control-panel" class="panel-collapsible collapsed">
     <div class="panel-glow"></div>
     <div class="panel-inner">
       <button id="control-panel-toggle" class="panel-header dock-tray-toggle" type="button"
         data-dock-toggle-target="control-panel" aria-expanded="false"
-        aria-controls="control-panel-popover" aria-label="Expand Visual Presets">
-        <span class="panel-title"><span class="dock-label-icon dock-label-icon-presets" aria-hidden="true"></span>VISUAL PRESETS</span>
+        aria-controls="control-panel-popover" aria-label="Expand map sources">
+        <span class="panel-title"><span class="dock-label-icon dock-label-icon-presets" aria-hidden="true"></span>MAP SOURCES</span>
         <span class="panel-divider"></span>
       </button>
       <div id="control-panel-popover" class="dock-popover-content touch-scroll-surface">
-      <button class="dock-tray-close" data-dock-close-target="control-panel" type="button" aria-label="Close visual presets" title="Close visual presets">&times;</button>
-      <button class="dock-pin-btn" data-pin-target="control-panel" type="button" aria-label="Pin visual presets" aria-pressed="false" title="Keep visual presets open"><img src="/pin.svg" alt="" /></button>
-      <div id="style-buttons" class="button-grid">
-        <button class="style-btn active" data-style="normal">
-          <span class="btn-icon">◯</span>
-          <span class="btn-label">Normal</span>
-          <span class="btn-key">1</span>
-        </button>
-        <button class="style-btn" data-style="retro">
-          <span class="btn-icon">▦</span>
-          <span class="btn-label">CRT</span>
-          <span class="btn-key">2</span>
-        </button>
-        <button class="style-btn" data-style="surveillance">
-          <span class="btn-icon">🌙</span>
-          <span class="btn-label">NVG</span>
-          <span class="btn-key">3</span>
-        </button>
-        <button class="style-btn" data-style="thermal">
-          <span class="btn-icon">🌡️</span>
-          <span class="btn-label">FLIR</span>
-          <span class="btn-key">4</span>
-        </button>
-        <button class="style-btn" data-style="anime">
-          <span class="btn-icon">✦</span>
-          <span class="btn-label">Anime</span>
-          <span class="btn-key">5</span>
-        </button>
-        <button class="style-btn" data-style="noir">
-          <span class="btn-icon">◐</span>
-          <span class="btn-label">Noir</span>
-          <span class="btn-key">6</span>
-        </button>
-        <button class="style-btn" data-style="snow">
-          <span class="btn-icon">❄</span>
-          <span class="btn-label">Snow</span>
-          <span class="btn-key">7</span>
-        </button>
-      </div>
+      <button class="dock-tray-close" data-dock-close-target="control-panel" type="button" aria-label="Close map sources" title="Close map sources">&times;</button>
+      <button class="dock-pin-btn" data-pin-target="control-panel" type="button" aria-label="Pin map sources" aria-pressed="false" title="Keep map sources open"><img src="/pin.svg" alt="" /></button>
       <section class="map-source-section" aria-labelledby="map-source-label">
         <div class="map-source-heading">
           <span id="map-source-label">MAP SOURCE</span>
@@ -554,10 +456,6 @@
         </div>
         <div id="map-stack-chips" class="map-stack-chip-row" role="group" aria-label="Map source"></div>
       </section>
-      </div>
-      <div id="style-mini-status" class="panel-mini-status" aria-live="polite">
-        <span class="panel-mini-label">Style</span>
-        <span id="style-mini-value" class="panel-mini-value">NORMAL</span>
       </div>
     </div>
   </div>
@@ -618,12 +516,9 @@
       <button id="mobile-more-close" type="button" aria-label="Close more tools">&times;</button>
     </header>
     <div class="mobile-more-grid">
-      <button type="button" data-mobile-panel="control-panel"><span class="material-symbols-outlined" aria-hidden="true">palette</span>VISUAL PRESETS</button>
-      <button type="button" data-mobile-panel="scene-panel"><span class="material-symbols-outlined" aria-hidden="true">movie</span>SCENES</button>
+      <button type="button" data-mobile-panel="control-panel"><span class="material-symbols-outlined" aria-hidden="true">map</span>MAP SOURCES</button>
       <button type="button" data-mobile-panel="pp-toggles"><span class="material-symbols-outlined" aria-hidden="true">tune</span>DISPLAY</button>
       <button type="button" data-mobile-panel="cctv-panel"><span class="material-symbols-outlined" aria-hidden="true">videocam</span>CCTV</button>
-      <button type="button" data-mobile-action="clear"><span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>CLEAR LAYERS</button>
-      <button type="button" data-mobile-action="share"><span class="material-symbols-outlined" aria-hidden="true">link</span>SHARE</button>
       <button type="button" data-mobile-action="reset"><span class="material-symbols-outlined" aria-hidden="true">public</span>RESET VIEW</button>
       <button type="button" data-mobile-action="logout"><span class="material-symbols-outlined" aria-hidden="true">logout</span>LOG OUT</button>
     </div>
@@ -640,6 +535,10 @@
         <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel">+</button>
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
+      <button id="clear-selected-layers" class="data-panel-clear" type="button" aria-label="Turn off all selected data layers">
+        <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
+        <span>TURN OFF SELECTED LAYERS</span>
+      </button>
     </div>
   </div>
 
@@ -658,27 +557,27 @@
       <div id="cctv-source-badge" role="status" aria-live="polite">SOURCE · UNKNOWN</div>
       <div id="cctv-meta">Enable CCTV to load camera intersections</div>
       <div class="cctv-controls">
-        <button id="cctv-enable-btn" class="scene-btn">CCTV OFF</button>
-        <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
+        <button id="cctv-enable-btn" class="panel-action-btn">CCTV OFF</button>
+        <button id="cctv-nearest-btn" class="panel-action-btn">NEAREST</button>
       </div>
       <div class="cctv-controls">
-        <button id="cctv-prev-btn" class="scene-btn">PREV</button>
+        <button id="cctv-prev-btn" class="panel-action-btn">PREV</button>
         <select id="cctv-camera-select" aria-label="CCTV camera"></select>
-        <button id="cctv-next-btn" class="scene-btn">NEXT</button>
+        <button id="cctv-next-btn" class="panel-action-btn">NEXT</button>
       </div>
       <div class="cctv-controls">
-        <button id="cctv-focus-btn" class="scene-btn">FOCUS</button>
-        <button id="cctv-coverage-btn" class="scene-btn">COVERAGE OFF</button>
-        <button id="cctv-auto-hop-btn" class="scene-btn">AUTO HOP OFF</button>
+        <button id="cctv-focus-btn" class="panel-action-btn">FOCUS</button>
+        <button id="cctv-coverage-btn" class="panel-action-btn">COVERAGE OFF</button>
+        <button id="cctv-auto-hop-btn" class="panel-action-btn">AUTO HOP OFF</button>
       </div>
       <div class="cctv-controls">
-        <button id="cctv-projection-btn" class="scene-btn">PROJECTION ON</button>
+        <button id="cctv-projection-btn" class="panel-action-btn">PROJECTION ON</button>
         <span id="cctv-quality-chip">CAL · --</span>
       </div>
       <div class="cctv-calibration-block">
         <div class="cctv-calibration-header">
           <div class="cctv-summary-label">CALIBRATION</div>
-          <button id="cctv-adjust-btn" class="scene-btn" title="Drag the camera in the world: rings rotate, arrows move, handles set range/FOV">ADJUST</button>
+          <button id="cctv-adjust-btn" class="panel-action-btn" title="Drag the camera in the world: rings rotate, arrows move, handles set range/FOV">ADJUST</button>
         </div>
         <div id="cctv-cal-readout" class="cctv-cal-readout" aria-label="Camera pose — click a value to type">
           <button class="cctv-cal-value" data-cal-field="heading" title="Heading (compass °) — click to type">HDG --</button>
@@ -690,49 +589,12 @@
           <button class="cctv-cal-value" data-cal-field="east" title="East offset from catalog position (m) — click to type">ΔE --</button>
         </div>
         <div class="cctv-controls cctv-calibration-actions">
-          <button id="cctv-calib-save-btn" class="scene-btn">SAVE CAL</button>
-          <button id="cctv-calib-reset-btn" class="scene-btn">RESET CAL</button>
+          <button id="cctv-calib-save-btn" class="panel-action-btn">SAVE CAL</button>
+          <button id="cctv-calib-reset-btn" class="panel-action-btn">RESET CAL</button>
         </div>
       </div>
       <div class="cctv-summary-label">SCENE SUMMARY</div>
       <div id="cctv-summary">Enable CCTV to start camera-linked intelligence summaries.</div>
-    </div>
-  </div>
-
-  <!-- Scene Director Panel -->
-  <div id="scene-panel" class="panel-collapsible collapsed" data-panel-id="scene-panel">
-    <div class="panel-glow"></div>
-    <div class="scene-panel-inner">
-      <div class="panel-header">
-        <span class="panel-title">SCENES</span>
-        <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="scene-panel" title="Collapse panel">+</button>
-      </div>
-      <div class="scene-controls">
-        <select id="scene-select" aria-label="Scene recipe"></select>
-        <button id="scene-new-btn" class="scene-btn">NEW</button>
-        <button id="scene-delete-btn" class="scene-btn scene-btn-danger">DEL</button>
-      </div>
-      <div class="scene-controls">
-        <button id="scene-capture-btn" class="scene-btn">CAPTURE SHOT</button>
-        <button id="scene-update-shot-btn" class="scene-btn">UPDATE SHOT</button>
-      </div>
-      <div id="scene-shot-list" class="scene-shot-list"></div>
-      <div class="scene-controls">
-        <button id="scene-start-btn" class="scene-btn">START</button>
-        <button id="scene-stop-btn" class="scene-btn scene-btn-danger">STOP</button>
-        <button id="scene-next-btn" class="scene-btn">NEXT</button>
-      </div>
-      <div class="scene-controls">
-        <button id="scene-export-btn" class="scene-btn">EXPORT PRESETS</button>
-        <button id="scene-import-btn" class="scene-btn">IMPORT</button>
-        <button id="scene-download-btn" class="scene-btn">RUN LOG</button>
-        <input type="file" id="scene-import-file" accept="application/json,.json" hidden />
-      </div>
-      <div class="scene-progress">
-        <div id="scene-progress-fill">0%</div>
-      </div>
-      <div id="scene-status">Ready</div>
     </div>
   </div>
 
@@ -883,7 +745,6 @@
     </div>
   </aside>
 
-  <div id="scene-runtime"></div>
 
   <!-- Explicit mission choice on a fresh session. Live feeds are not auto-enabled
        until the visitor asks; shared links skip this surface entirely. It returns

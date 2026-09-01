@@ -9,7 +9,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const ui = fs.readFileSync(path.join(ROOT, 'src', 'ui.js'), 'utf8');
 const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
-const sceneDirector = fs.readFileSync(path.join(ROOT, 'src', 'scenes', 'director.js'), 'utf8');
 const manager = fs.readFileSync(path.join(ROOT, 'src', 'data', 'manager.js'), 'utf8');
 const contextLayer = fs.readFileSync(path.join(ROOT, 'src', 'data', 'militaryAwareness.js'), 'utf8');
 const voiceActions = fs.readFileSync(path.join(ROOT, 'src', 'voice', 'gevActions.js'), 'utf8');
@@ -23,7 +22,8 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
-  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="reset-globe-view"/);
+  assert.match(topCenterActions[0], /id="reset-globe-view"[\s\S]*?id="logout-btn"/);
+  assert.doesNotMatch(topCenterActions[0], /clear-selected-layers|share-btn/);
   assert.equal((html.match(/id="clear-selected-layers"/g) || []).length, 1, 'Clear Layers must have one DOM owner');
   assert.equal((html.match(/id="reset-globe-view"/g) || []).length, 1, 'Reset Globe must have one DOM owner');
   assert.equal((html.match(/id="cockpit-reset-globe"/g) || []).length, 1, 'Cockpit Reset must have one DOM owner');
@@ -64,25 +64,9 @@ test('Cockpit heading tape leaves the bottom exit row unobstructed', () => {
   assert.doesNotMatch(css, /cockpit-compass-label/);
 });
 
-test('Cockpit vision cycle exposes exactly five real visual styles without NONE', () => {
-  assert.match(ui, /const modes = COCKPIT_VISION_MODES;/);
-  assert.match(ui, /const labels = \{ optical: inherited, crt: 'CRT', nvg: 'NVG', thermal: 'FLIR', noir: 'NOIR' \};/);
-  assert.doesNotMatch(ui, /none: 'NONE'/);
-  assert.match(ui, /getInheritedVisionLabel: \(\) => \([\s\S]*?STYLE_STATUS_LABELS\[this\.activeStyle\]/);
-  assert.match(html, /id="cockpit-vision-current-label"[^>]*>NORMAL<\/strong>/);
-  assert.match(ui, /const target = applyCockpitVisionStageIntensities\(this\.stages, next, this\._cockpitVisionRestore\);/);
-  assert.match(ui, /this\._cockpitVisionRestore = captureCockpitVisionBaseline\(this\.stages, this\.transitions\);/);
-  assert.match(
-    ui,
-    /if \(next === 'optical'\) \{[\s\S]*?applyCockpitVisionStageIntensities\(this\.stages, next, this\._cockpitVisionRestore\);[\s\S]*?return;[\s\S]*?const target = applyCockpitVisionStageIntensities/,
-    'the inherited entry must restore the map shader while CRT, NVG, FLIR, and NOIR remain temporary Cockpit overrides',
-  );
-  assert.match(
-    ui,
-    /_syncCockpitInheritedStyle\(\)[\s\S]*?name === this\.activeStyle \? 1 : 0[\s\S]*?this\.transitions\.delete\(name\)[\s\S]*?setVisionMode\(this\.cockpitView\.visionMode\)/,
-    'changing the map preset in Cockpit must refresh both the inherited label and restore baseline',
-  );
-  assert.match(ui, /setStyle\([\s\S]*?this\._syncCockpitInheritedStyle\(\);/);
+test('Cockpit exposes no visual-preset cycle', () => {
+  assert.doesNotMatch(html, /id="cockpit-vision-(?:previous|current|next|current-label)"/);
+  assert.doesNotMatch(html, /cockpit-vision-controls/);
 });
 
 test('Contacts uses the approved radar icon', () => {
@@ -211,24 +195,17 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   const hiddenRule = css.match(/body\.cockpit-mode :is\(([^)]*)\)\s*\{\s*display:\s*none\s*!important;/);
   assert.ok(hiddenRule, 'Cockpit hidden-chrome rule is missing');
   assert.match(css, /body\.cockpit-mode #right-context-rail\s*\{\s*display:\s*none\s*!important;/);
-  assert.match(css, /body\.cockpit-mode #left-panel-stack > #scene-panel\s*\{\s*display:\s*none\s*!important;/);
   assert.match(html, /id="cockpit-display-toggle-btn"[^>]*aria-controls="cockpit-display-panel"/);
   assert.match(html, /id="cockpit-display-toggle-btn"[^>]*>◀<\/button>/);
   assert.match(html, /data-cockpit-launcher="display"[\s\S]*?id="cockpit-display-toggle-btn"/);
   assert.match(html, /data-cockpit-display-slot="hud"/);
   assert.match(html, /data-cockpit-display-slot="detection"[\s\S]*?data-cockpit-display-slot="parameters"[\s\S]*?data-cockpit-display-slot="models3d"/);
   assert.doesNotMatch(html, /data-cockpit-display-slot="presets"/);
-  assert.match(html, /id="clear-selected-layers"[^>]*aria-label="Clear selected data layers"/);
+  assert.match(html, /id="clear-selected-layers"[^>]*aria-label="Turn off all selected data layers"/);
   assert.match(html, /id="reset-globe-view"[^>]*aria-label="Reset to full globe view"/);
   assert.match(css, /#top-center-actions\s*\{[\s\S]*?left:\s*50%;[\s\S]*?display:\s*flex;[\s\S]*?transform:\s*translateX\(-50%\)/);
   assert.match(css, /body\.ui-clean-view #top-center-actions/);
   assert.match(css, /body\.recording-mode #top-center-actions/);
-  assert.match(
-    css,
-    /body\.scene-playback-mode :is\(#clear-selected-layers, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
-  );
-  assert.match(sceneDirector, /this\._running = true;\s*document\.body\.classList\.add\('scene-playback-mode'\);/);
-  assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
   assert.equal((html.match(/id="hud-toggle"/g) || []).length, 1, 'HUD control must have one stateful DOM owner');
   assert.equal((html.match(/id="detection-toggle"/g) || []).length, 1, 'Detection control must have one stateful DOM owner');
   assert.equal((html.match(/id="models3d-toggle"/g) || []).length, 1, '3D control must have one stateful DOM owner');
@@ -375,7 +352,6 @@ test('fresh Cockpit entry temporarily collapses map panels and exit restores the
   for (const panelId of [
     'data-panel',
     'cctv-panel',
-    'scene-panel',
     'pp-toggles',
     'global-context-panel',
     'radio-panel',
@@ -451,11 +427,6 @@ test('Cockpit hides the complete top-center globe action group', () => {
   assert.match(
     css,
     /body\.cockpit-mode :is\([\s\S]*?#top-center-actions[\s\S]*?\) \{ display: none !important; \}/,
-  );
-  assert.match(
-    css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
-    'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
 });
 
@@ -650,14 +621,13 @@ test('Cockpit Display portals shared HUD, Detection, Parameters, and 3D controls
     /window\.removeEventListener\('gev:cockpit-mode-changed', this\._cockpitDisplayModeHandler\)[\s\S]*?_setCockpitDisplayPortalActive\(false\)[\s\S]*?record\.anchor\.remove\(\)/,
   );
   assert.doesNotMatch(ui, /_cycleCockpitHud|_cockpitModels3dToggle|_cockpitDetectionToggle/);
-  assert.equal((html.match(/id="style-buttons"/g) || []).length, 1);
+  assert.equal((html.match(/id="style-buttons"/g) || []).length, 0);
+  assert.doesNotMatch(html, /class="[^"]*style-btn/);
   assert.equal((html.match(/id="param-slider-panel"/g) || []).length, 1);
   assert.match(html, /data-cockpit-display-slot="detection"[\s\S]*?data-cockpit-display-slot="parameters"[\s\S]*?data-cockpit-display-slot="models3d"/);
   assert.match(ui, /_revealStyleParameters\(\) \{[\s\S]*?if \(this\._cockpitDisplayPortalActive\) return;/);
-  assert.match(ui, /closest\?\.\('\.cockpit-vision-controls'\)\) return;/);
   assert.match(ui, /_revealCockpitStyleParameters\(\{ openDisplay = false \} = \{\}\) \{[\s\S]*?openDisplay[\s\S]*?_setCockpitDisclosure\?\.\('display', true\)[\s\S]*?aria-expanded'\) !== 'true'[\s\S]*?classList\.remove\('collapsed'\)/);
   assert.match(ui, /if \(displayOpen\) this\._revealCockpitStyleParameters\(\);/);
-  assert.match(ui, /setVisionMode\(modes\[nextIndex\], \{ revealParameters: true \}\);/);
   assert.match(css, /\.cockpit-display-slot\s*\{[\s\S]*?display:\s*block;[\s\S]*?min-width:\s*0;/);
   assert.match(css, /#cockpit-display-panel \.pp-toggle-group\s*\{\s*width:\s*100%/);
   assert.match(css, /#cockpit-display-panel \.pp-toggle-group\s*\{[\s\S]*?min-width:\s*0;/);
