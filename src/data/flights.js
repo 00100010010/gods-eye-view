@@ -386,6 +386,7 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
   const bb = _billboards.get(icao24);
   const info = _flightData.get(icao24);
   if (!bb?.position || !info) return false;
+  const contextSubject = _contextSubjectMetadata(icao24);
   if (_trackedEntity) _trackedEntity.gevSelectionOrigin = origin;
   _emitAwarenessEvent('gev:awareness-subject-selected', {
     layerId: 'flights',
@@ -395,10 +396,12 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
     // a callsign-less contact reached Context as its raw hex even once adsbdb
     // had supplied a registration. Identity below stays `icao24`.
     label: _contactLabel(icao24, info),
+    registration: contextSubject?.properties?.registration || '',
+    aircraftType: contextSubject?.properties?.type || '',
     position: Cesium.Cartesian3.clone(bb.position),
     origin,
   });
-  selectTrackedSubjectContext(_contextSubjectMetadata(icao24));
+  selectTrackedSubjectContext(contextSubject);
   return true;
 }
 

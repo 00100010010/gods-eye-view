@@ -35,6 +35,7 @@ import { loadPhotorealisticTileset } from './mapStartup.js';
 import { initMobileNavigation } from './mobileNavigation.js';
 import { installCesiumSessionRecovery } from './sessionRecovery.js';
 import { installTrackpadOrientation } from './trackpadOrientation.js';
+import { initAircraftPhotoCard } from './aircraftPhotoCard.js';
 
 initLogoGaze();
 
@@ -208,6 +209,7 @@ async function init() {
 
     // Initialize the style manager (post-processing, HUD, locations, share links)
     const styleManager = new StyleManager(viewer, { mapStackController });
+    const aircraftPhotoCard = initAircraftPhotoCard();
     document.getElementById('map-source-retry')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
@@ -349,6 +351,7 @@ async function init() {
       annotations,
       weatherEffects,
       cockpitCloudEffects,
+      aircraftPhotoCard,
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };

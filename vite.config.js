@@ -18,6 +18,7 @@
  *  13. Weather effects — camera-local Open-Meteo observations without news/geocoding overhead
  *  14. Rocket launches — recent Launch Library 2 mission metadata
  *  15. Radio Browser — public-domain station directory and click counting
+ *  16. Planespotters — source-attributed aircraft photos by ICAO24
  *
  * Also exposes Cesium and Google 3D Tiles API keys to the
  * client via `import.meta.env.*` defines.
@@ -53,6 +54,10 @@ import {
   normalizeRegionalWeather,
 } from './src/data/regionalBrief.js';
 import { normalizeAdsbLolPointResponse } from './src/data/adsbLolFallback.js';
+import {
+  normalizeAircraftPhotoIcao,
+  normalizePlanespottersPhotoPayload,
+} from './src/data/aircraftPhoto.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from './src/data/aisStreamAdapter.js';
 import { parseSilenceTimeoutEnv } from './src/data/aisWatchdog.js';
 import { keylessHudSummaryResponse } from './src/hudSummaryResponse.js';
@@ -471,6 +476,7 @@ function makeRateLimiter({ windowMs, max, globalMax }) {
 const _overpassRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 90, globalMax: 300 });
 const _militaryInstallationsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 90, globalMax: 300 });
 const _routeRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 60, globalMax: 200 });
+const _aircraftPhotoRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 120, globalMax: 400 });
 
 /**
  * Opt-in per-IP rate limiter for the cost-bearing API proxies (OpenAI / Google).
@@ -2490,6 +2496,131 @@ function adsbdbProxy() {
         }
       });
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Aircraft photo proxy — Planespotters public photo API
+// ---------------------------------------------------------------------------
+const AIRCRAFT_PHOTO_CACHE_MS = 24 * 60 * 60 * 1000;
+const AIRCRAFT_PHOTO_MISS_CACHE_MS = 6 * 60 * 60 * 1000;
+const AIRCRAFT_PHOTO_CACHE_MAX = 500;
+const AIRCRAFT_PHOTO_MAX_RESPONSE_BYTES = 512 * 1024;
+const AIRCRAFT_PHOTO_TIMEOUT_MS = 6_000;
+
+/** Fetch and normalize one source-attributed aircraft photo. Exported for tests. */
+export async function fetchPlanespottersAircraftPhoto(icao24, {
+  fetchImpl = fetch,
+  timeoutMs = AIRCRAFT_PHOTO_TIMEOUT_MS,
+} = {}) {
+  const normalized = normalizeAircraftPhotoIcao(icao24);
+  if (!normalized) throw new TypeError('Invalid ICAO24 address');
+  const response = await fetchImpl(
+    `https://api.planespotters.net/pub/photos/hex/${encodeURIComponent(normalized)}`,
+    {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'GodsEyeView/0.1 (+https://godseyeview.jimtrebes.fr)',
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    },
+  );
+  if (!response.ok) throw new Error(`Planespotters returned ${response.status}`);
+  return normalizePlanespottersPhotoPayload(
+    await readResponseJsonCapped(response, AIRCRAFT_PHOTO_MAX_RESPONSE_BYTES),
+  );
+}
+
+/**
+ * Same-origin, session-gated metadata endpoint for the clicked aircraft.
+ * Successful misses are cached too: an aircraft with no community photo must
+ * not cause one upstream request per click. Only allowlisted provider fields
+ * reach the browser; the endpoint is not an arbitrary URL relay.
+ */
+function aircraftPhotoProxy() {
+  const cache = new Map();
+  const inFlight = new Map();
+
+  const prune = () => {
+    while (cache.size > AIRCRAFT_PHOTO_CACHE_MAX) cache.delete(cache.keys().next().value);
+  };
+
+  const lookup = (icao24) => {
+    const now = Date.now();
+    const cached = cache.get(icao24);
+    const ttl = cached?.payload?.found ? AIRCRAFT_PHOTO_CACHE_MS : AIRCRAFT_PHOTO_MISS_CACHE_MS;
+    if (cached && now - cached.cachedAt <= ttl) {
+      // Touch the entry so the bounded Map behaves like a small LRU.
+      cache.delete(icao24);
+      cache.set(icao24, cached);
+      return Promise.resolve({ payload: cached.payload, source: 'HIT' });
+    }
+    const existing = inFlight.get(icao24);
+    if (existing) return existing.then((payload) => ({ payload, source: 'INFLIGHT' }));
+
+    let pending;
+    pending = fetchPlanespottersAircraftPhoto(icao24)
+      .then((photo) => {
+        const payload = photo ? { found: true, photo } : { found: false };
+        cache.set(icao24, { payload, cachedAt: Date.now() });
+        prune();
+        return payload;
+      })
+      .finally(() => {
+        if (inFlight.get(icao24) === pending) inFlight.delete(icao24);
+      });
+    inFlight.set(icao24, pending);
+    return pending.then((payload) => ({ payload, source: 'MISS' }));
+  };
+
+  const install = (middlewares) => {
+    middlewares.use('/api/aircraft-photo', async (req, res) => {
+      const send = (status, payload, headers = {}) => {
+        const body = JSON.stringify(payload);
+        res.writeHead(status, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': status === 200 ? 'private, max-age=3600' : 'no-store',
+          ...headers,
+        });
+        if (req.method === 'HEAD') res.end();
+        else res.end(body);
+      };
+
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        send(405, { error: 'Method not allowed' }, { Allow: 'GET, HEAD' });
+        return;
+      }
+      const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+      const segments = pathname.split('/').filter(Boolean);
+      const icao24 = segments.length === 1 ? normalizeAircraftPhotoIcao(segments[0]) : null;
+      if (!icao24) {
+        send(400, { error: 'Invalid ICAO24 address' });
+        return;
+      }
+      if (!_aircraftPhotoRateLimiter(clientKey(req))) {
+        send(429, { error: 'Rate limit exceeded' }, { 'Retry-After': '5' });
+        return;
+      }
+
+      try {
+        const result = await lookup(icao24);
+        send(200, result.payload, { 'X-Aircraft-Photo-Cache': result.source });
+      } catch (error) {
+        const stale = cache.get(icao24)?.payload;
+        if (stale) {
+          send(200, stale, { 'X-Aircraft-Photo-Cache': 'STALE' });
+          return;
+        }
+        console.warn('[Aircraft Photo Proxy]', error?.message || error);
+        send(502, { error: 'Aircraft photo provider unavailable' });
+      }
+    });
+  };
+
+  return {
+    name: 'aircraft-photo-proxy',
+    configureServer(server) { install(server.middlewares); },
+    configurePreviewServer(server) { install(server.middlewares); },
   };
 }
 
@@ -7741,6 +7872,7 @@ export default defineConfig(({ mode }) => {
   const env = { ...process.env };
   const applicationMiddleware = [
     openSkyProxy(),
+    aircraftPhotoProxy(),
     celestrakProxy(),
     tomtomProxy(),
     firmsProxy(),

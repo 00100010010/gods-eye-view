@@ -318,15 +318,18 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
   const bb = _billboards.get(icao24);
   const info = _flightData.get(icao24);
   if (!bb?.position || !info) return false;
+  const contextSubject = _contextSubjectMetadata(icao24);
   if (_trackedEntity) _trackedEntity.gevSelectionOrigin = origin;
   _emitAwarenessEvent('gev:awareness-subject-selected', {
     layerId: 'military',
     id: icao24,
     label: _toCleanText(info.callsign) || _toCleanText(info.registration) || icao24,
+    registration: contextSubject?.properties?.registration || '',
+    aircraftType: contextSubject?.properties?.type || '',
     position: Cesium.Cartesian3.clone(bb.position),
     origin,
   });
-  selectTrackedSubjectContext(_contextSubjectMetadata(icao24));
+  selectTrackedSubjectContext(contextSubject);
   return true;
 }
 

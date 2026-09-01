@@ -1260,6 +1260,7 @@ body.ui-clean-view #data-panel,
 body.ui-clean-view #cctv-panel,
 body.ui-clean-view #radio-panel,
 body.ui-clean-view #global-context-panel,
+body.ui-clean-view #aircraft-photo-card,
 body.ui-clean-view #scene-panel {
   opacity: 0 !important;
   visibility: hidden !important;
@@ -2072,6 +2073,119 @@ body.ui-clean-view #scene-runtime.active {
   visibility: visible;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ── Selected-aircraft photo ────────────────── */
+#aircraft-photo-card {
+  position: fixed;
+  z-index: 145;
+  top: max(24px, env(safe-area-inset-top));
+  right: max(36px, env(safe-area-inset-right));
+  width: min(320px, calc(100vw - 32px));
+  overflow: hidden;
+  background: rgba(3, 12, 18, 0.94);
+  border: 1px solid rgba(0, 212, 255, 0.38);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48), 0 0 24px rgba(0, 212, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#aircraft-photo-card[hidden] { display: none; }
+
+#aircraft-photo-close {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  color: rgba(231, 247, 251, 0.88);
+  font: 400 24px/1 var(--font-sans);
+  background: rgba(2, 8, 12, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+#aircraft-photo-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.aircraft-photo-media {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  color: rgba(199, 225, 231, 0.56);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-align: center;
+  background:
+    linear-gradient(rgba(0, 212, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.035) 1px, transparent 1px),
+    rgba(2, 8, 12, 0.84);
+  background-size: 18px 18px;
+}
+
+#aircraft-photo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#aircraft-photo-link {
+  width: 100%;
+  height: 100%;
+}
+
+#aircraft-photo-link[hidden],
+#aircraft-photo-image[hidden],
+#aircraft-photo-status[hidden],
+#aircraft-photo-credit[hidden] { display: none; }
+
+.aircraft-photo-copy {
+  display: grid;
+  gap: 4px;
+  padding: 11px 14px 13px;
+  font-family: var(--font-mono);
+}
+
+#aircraft-photo-title {
+  padding-right: 32px;
+  overflow: hidden;
+  color: #e7f9ff;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+#aircraft-photo-meta {
+  overflow: hidden;
+  color: rgba(205, 231, 238, 0.58);
+  font-size: 9px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#aircraft-photo-credit {
+  margin-top: 3px;
+  overflow: hidden;
+  color: rgba(0, 212, 255, 0.82);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+#aircraft-photo-credit:hover,
+#aircraft-photo-credit:focus-visible { color: #b8f4ff; }
 
 /* ── Aircraft Cockpit View ─────────────────── */
 #cockpit-entry {
@@ -6641,6 +6755,7 @@ body.recording-mode #data-panel,
 body.recording-mode #cctv-panel,
 body.recording-mode #radio-panel,
 body.recording-mode #global-context-panel,
+body.recording-mode #aircraft-photo-card,
 body.recording-mode #gev-voice-control,
 body.recording-mode #scene-panel {
   opacity: 0 !important;
@@ -9964,6 +10079,17 @@ body.cockpit-mode #key-setup {
 
 @media (max-width: 720px) {
   #top-center-actions { display: none !important; }
+
+  #aircraft-photo-card {
+    top: max(12px, env(safe-area-inset-top));
+    right: 10px;
+    width: min(300px, calc(100vw - 20px));
+  }
+
+  #aircraft-photo-close {
+    width: 44px;
+    height: 44px;
+  }
 
   #mobile-command-nav {
     position: fixed;
