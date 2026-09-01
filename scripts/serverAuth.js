@@ -359,6 +359,9 @@ export function createAppAuthPlugin({
         const method = String(req.method || 'GET').toUpperCase();
         const cookies = parseCookies(req.headers.cookie);
         const session = verifySessionToken(cookies[SESSION_COOKIE], secret);
+        const authenticated = Boolean(
+          session && users.some(({ username }) => username === session.username),
+        );
 
         if ((method === 'GET' || method === 'HEAD') && PUBLIC_PATHS.has(pathname)) {
           next();
@@ -366,7 +369,7 @@ export function createAppAuthPlugin({
         }
 
         if ((method === 'GET' || method === 'HEAD') && pathname === '/login') {
-          if (session) {
+          if (authenticated) {
             redirect(res, '/');
             return;
           }
@@ -441,7 +444,7 @@ export function createAppAuthPlugin({
             res.end();
             return;
           }
-          if (!session || !isTrustedOrigin(req, expectedOrigin)) {
+          if (!authenticated || !isTrustedOrigin(req, expectedOrigin)) {
             securityHeaders(res);
             res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Forbidden');
@@ -451,7 +454,19 @@ export function createAppAuthPlugin({
           return;
         }
 
-        if (session && users.some(({ username }) => username === session.username)) {
+        if ((method === 'GET' || method === 'HEAD') && pathname === '/api/auth/session') {
+          securityHeaders(res);
+          if (!authenticated) {
+            res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'Authentication required' }));
+            return;
+          }
+          res.writeHead(204, { 'Content-Length': '0' });
+          res.end();
+          return;
+        }
+
+        if (authenticated) {
           next();
           return;
         }

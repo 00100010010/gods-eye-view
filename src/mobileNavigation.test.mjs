@@ -36,7 +36,7 @@ test('mobile panels are transient one-at-a-time sheets with four exit paths', ()
   assert.match(mobile, /event\.key !== 'Escape'/);
   assert.match(mobile, /if \(distance > 72\) collapsePanel\(panel\.id\)/);
   assert.match(css, /height: min\(64dvh, 34rem\) !important/);
-  assert.match(css, /bottom: max\(5\.5rem, calc\(env\(safe-area-inset-bottom\) \+ 5rem\)\) !important/);
+  assert.match(css, /bottom: max\(calc\(2vh \+ 7\.5rem\), calc\(env\(safe-area-inset-bottom\) \+ 7\.5rem\)\) !important/);
 });
 
 test('failed map artwork is replaced by a persistent accessible message', () => {
@@ -45,4 +45,3 @@ test('failed map artwork is replaced by a persistent accessible message', () => 
   assert.match(html, /id="map-source-choose"/);
   assert.match(html, /id="map-source-dismiss"[^>]*aria-label=/);
 });
-

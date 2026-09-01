@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import {
   APP_PERMISSIONS_POLICY,
   FailedLoginLimiter,
+  SESSION_COOKIE,
+  createAppAuthPlugin,
   createLoginCsrf,
   createSessionToken,
   forwardedClientKey,
@@ -75,4 +77,45 @@ test('state-changing authentication accepts only the exact HTTPS origin', () => 
   assert.equal(isTrustedOrigin({ headers: { origin: 'https://godseyeview.jimtrebes.fr' } }, 'https://godseyeview.jimtrebes.fr'), true);
   assert.equal(isTrustedOrigin({ headers: { origin: 'https://evil.example' } }, 'https://godseyeview.jimtrebes.fr'), false);
   assert.equal(isTrustedOrigin({ headers: {} }, 'https://godseyeview.jimtrebes.fr'), false);
+});
+
+async function requestSessionProbe(cookie = '') {
+  let middleware;
+  createAppAuthPlugin({
+    usersRaw: `jim:${hashOne},guest:${hashTwo}`,
+    sessionSecret: secret,
+    hostname: 'godseyeview.jimtrebes.fr',
+  }).configureServer({
+    middlewares: { use(handler) { middleware = handler; } },
+  });
+
+  const headers = {};
+  const response = {
+    headersSent: false,
+    setHeader(name, value) { headers[name.toLowerCase()] = value; },
+    writeHead(status, nextHeaders = {}) {
+      this.status = status;
+      this.headersSent = true;
+      for (const [name, value] of Object.entries(nextHeaders)) headers[name.toLowerCase()] = value;
+    },
+    end(body = '') { this.body = body; },
+  };
+  await middleware({
+    method: 'GET',
+    url: '/api/auth/session',
+    headers: { cookie },
+    socket: {},
+  }, response, () => { throw new Error('Session probe escaped the auth gate'); });
+  return { status: response.status, body: response.body, headers };
+}
+
+test('session probe is private and distinguishes a live signed session', async () => {
+  const denied = await requestSessionProbe();
+  assert.equal(denied.status, 401);
+  assert.equal(denied.headers['cache-control'], 'no-store, max-age=0');
+
+  const token = createSessionToken('jim', secret);
+  const allowed = await requestSessionProbe(`${SESSION_COOKIE}=${token}`);
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.body, '');
 });

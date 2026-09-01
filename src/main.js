@@ -35,6 +35,7 @@ import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
 import { initMobileNavigation } from './mobileNavigation.js';
+import { installCesiumSessionRecovery } from './sessionRecovery.js';
 
 initLogoGaze();
 
@@ -127,6 +128,7 @@ async function init() {
         },
       },
     });
+    installCesiumSessionRecovery(viewer);
 
     // Cap the default render loop at 60 fps. Cesium's loop otherwise runs at
     // the display's refresh rate — 120 Hz on ProMotion panels — doubling GPU

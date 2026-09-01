@@ -209,6 +209,7 @@ const RECOGNIZED = new Set([
   '#command-dock #control-panel .dock-popover-content',
   '#command-dock #location-bar:not(.collapsed) .dock-popover-content',
   '#command-dock #control-panel:not(.collapsed) .dock-popover-content',
+  '#command-dock > :is(#location-bar, #control-panel):not(.collapsed) .dock-popover-content',
   '#command-dock.dock-has-pinned-tray #location-bar:not(.collapsed):not(.dock-pinned) .dock-popover-content',
   '#command-dock.dock-has-pinned-tray #control-panel:not(.collapsed):not(.dock-pinned) .dock-popover-content',
   '#command-dock.dock-has-two-pinned-trays .dock-pinned-top.dock-pinned:not(.collapsed) .dock-popover-content',
@@ -398,7 +399,16 @@ test('the model refuses every cascade construct it cannot resolve', () => {
       complaints.push(`nested media queries on "${part}": ${rule.media.join(' && ')}`);
     }
     for (const decl of guarded) {
-      if (decl.important) complaints.push(`!important on ${decl.prop} of "${part}"`);
+      const mobileSheetContent = part
+        === '#command-dock > :is(#location-bar, #control-panel):not(.collapsed) .dock-popover-content'
+        && rule.media.length === 1
+        && parseMediaCondition(rule.media[0]) === 720;
+      // The mobile sheet deliberately overrides every desktop/pinned tray
+      // state. Its content does not own the screen-space floor; the fixed
+      // parent does, and that parent's exact clearance is pinned below.
+      if (decl.important && !mobileSheetContent) {
+        complaints.push(`!important on ${decl.prop} of "${part}"`);
+      }
       if (decl.prop === 'inset' || decl.prop === 'margin' || decl.prop === 'all'
         || decl.prop.startsWith('inset-') || decl.prop.startsWith('margin-block')) {
         complaints.push(`shorthand ${decl.prop} on "${part}" — the model reads longhands only`);
@@ -407,11 +417,14 @@ test('the model refuses every cascade construct it cannot resolve', () => {
         // A capped height can override `bottom` and invalidate the measured
         // dock/credit constants. Two exemptions, each earned by a test below:
         // the rail's own max-height (resolved to `none` across the whole
-        // modelled band by the rail clearance test) and `.layout-focus`
-        // (proven inapplicable at <=720px by the mobile-mode test).
+        // modelled band), `.layout-focus` (proven inapplicable at <=720px),
+        // and the content inside the mobile sheet whose parent floor is proven
+        // independently below.
         const railOwn = part === '#right-context-rail' && decl.prop === 'max-height';
         const railFocus = part === '#right-context-rail.layout-focus';
-        if (!railOwn && !railFocus) complaints.push(`${decl.prop}: ${decl.value} on "${part}"`);
+        if (!railOwn && !railFocus && !mobileSheetContent) {
+          complaints.push(`${decl.prop}: ${decl.value} on "${part}"`);
+        }
       }
       if (decl.prop === 'transform' && /translateY|translate3d|matrix|scale\(/.test(decl.value)) {
         const identity = decl.value === 'translateY(0) scale(1)';
@@ -484,6 +497,27 @@ test('the full-width rail cannot inherit a height that overrides its floor', () 
   const mobileBranch = ui.slice(gate, ui.indexOf("layoutMode = 'mobile'", gate) + 40);
   assert.match(mobileBranch, /stack\.classList\.remove\('layout-focus'\)/);
   assert.match(mobileBranch, /stack\.style\.removeProperty\('--right-stack-max-height'\)/);
+});
+
+test('the mobile location and presets sheets clear the required credit band', () => {
+  const selector = '#command-dock > :is(#location-bar, #control-panel):not(.collapsed)';
+  const rule = RULES.find((candidate) => candidate.parts.includes(selector)
+    && candidate.decls.some((decl) => decl.prop === 'bottom'));
+  assert.ok(rule, 'the mobile-sheet bottom anchor is missing');
+  assert.equal(rule.media.length, 1);
+  assert.equal(parseMediaCondition(rule.media[0]), 720);
+  assert.equal(
+    rule.decls.find((decl) => decl.prop === 'bottom')?.value,
+    'max(calc(2vh + 7.5rem), calc(env(safe-area-inset-bottom) + 7.5rem))',
+  );
+
+  for (const height of HEIGHTS) {
+    // Safe-area inset is non-negative, so the first max() branch is the
+    // conservative floor at every device height.
+    const sheetBottom = (height * 0.02) + (7.5 * REM_PX);
+    const clearance = sheetBottom - creditTopPx(720, height);
+    assert.ok(clearance >= MIN_CLEARANCE_PX, `${height}px-high mobile sheet leaves ${clearance}px`);
+  }
 });
 
 // ── Clearance ───────────────────────────────────────────────────────────────

@@ -10228,7 +10228,7 @@ body.scene-playback-mode #key-setup {
     z-index: 195 !important;
     top: auto !important;
     right: 10px !important;
-    bottom: max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem)) !important;
+    bottom: max(calc(2vh + 7.5rem), calc(env(safe-area-inset-bottom) + 7.5rem)) !important;
     left: 10px !important;
     box-sizing: border-box !important;
     width: auto !important;
