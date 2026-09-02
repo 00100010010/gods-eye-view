@@ -10326,3 +10326,27 @@ body.cockpit-mode #key-setup {
     pointer-events: none;
   }
 }
+
+/* Temporary voice release gate. The implementation stays in the repository,
+   but the two remaining dock tools close ranks while the microphone is off. */
+body.voice-control-disabled #command-dock {
+  --dock-voice-width: 0px;
+}
+
+body.voice-control-disabled #command-dock > #location-bar {
+  border-right: 0;
+}
+
+body.voice-control-disabled #command-dock > #control-panel {
+  border-left: 1px solid rgba(123, 189, 211, 0.16);
+}
+
+@media (max-width: 720px) {
+  body.voice-control-disabled #mobile-command-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body.voice-control-disabled .mobile-command-nav-spacer {
+    display: none;
+  }
+}

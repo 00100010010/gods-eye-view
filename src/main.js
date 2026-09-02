@@ -17,7 +17,6 @@ import militaryAwarenessLayer from './data/militaryAwareness.js';
 import localDataLayers from './data/localLayers.js';
 import { LAYER_STATE_REGISTRY } from './data/layerState.js';
 import { registerDataCredits } from './data/dataCredits.js';
-import { initGevVoiceCommands } from './voice/gevRealtime.js';
 import { MapStackController } from './mapStackController.js';
 import { initAnnotations } from './annotations/index.js';
 import { initLogoGaze } from './logoGaze.js';
@@ -36,6 +35,11 @@ import { initMobileNavigation } from './mobileNavigation.js';
 import { installCesiumSessionRecovery } from './sessionRecovery.js';
 import { installTrackpadOrientation } from './trackpadOrientation.js';
 import { initAircraftPhotoCard } from './aircraftPhotoCard.js';
+
+// Temporary release gate: keep the complete voice implementation available
+// without mounting a microphone control, requesting audio permission, or
+// loading the Realtime client in the browser. Flip this one value to restore it.
+const VOICE_CONTROL_ENABLED = false;
 
 initLogoGaze();
 
@@ -355,7 +359,16 @@ async function init() {
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };
-    window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, annotations });
+    window.__godsEyeView.voiceCommands = null;
+    if (VOICE_CONTROL_ENABLED) {
+      const { initGevVoiceCommands } = await import('./voice/gevRealtime.js');
+      window.__godsEyeView.voiceCommands = initGevVoiceCommands({
+        viewer,
+        styleManager,
+        dataManager,
+        annotations,
+      });
+    }
     window.__godsEyeView.mobileNavigation = initMobileNavigation({ styleManager });
 
   } catch (error) {

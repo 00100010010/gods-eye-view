@@ -6,7 +6,7 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 const mobile = fs.readFileSync(new URL('./mobileNavigation.js', import.meta.url), 'utf8');
 
-test('phone navigation keeps four primary tools around the centered microphone', () => {
+test('phone navigation keeps four primary tools and closes the disabled microphone slot', () => {
   const nav = html.slice(html.indexOf('<nav id="mobile-command-nav"'), html.indexOf('</nav>', html.indexOf('<nav id="mobile-command-nav"')));
   assert.equal((nav.match(/<button/g) || []).length, 4);
   assert.match(nav, /data-mobile-panel="location-bar"/);
@@ -15,7 +15,9 @@ test('phone navigation keeps four primary tools around the centered microphone',
   assert.match(nav, /data-mobile-panel="global-context-panel"/);
   assert.match(nav, /id="mobile-more-toggle"[^>]*aria-expanded="false"/);
   assert.match(css, /grid-template-columns: 1fr 1fr 1\.15fr 1fr 1fr/);
-  assert.match(css, /#command-dock > #gev-voice-control \{[\s\S]*?position: fixed !important;[\s\S]*?left: 50% !important/);
+  assert.match(html, /<body class="voice-control-disabled">/);
+  assert.match(css, /body\.voice-control-disabled #mobile-command-nav \{[\s\S]*?repeat\(4,/);
+  assert.match(css, /body\.voice-control-disabled \.mobile-command-nav-spacer \{[\s\S]*?display: none/);
 });
 
 test('advanced tools move into one closable mobile menu', () => {
