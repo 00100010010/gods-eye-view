@@ -4,11 +4,11 @@ set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lock_path=/run/lock/vps-heavy-operation.lock
 sample_seconds=5
-max_load_one=3
-max_steal=10
-min_idle=50
-max_busy=60
-max_iowait=25
+max_load_one=10
+max_steal=40
+min_idle=20
+max_busy=80
+max_iowait=35
 min_available_mib=4096
 
 usage() {
@@ -146,7 +146,8 @@ check_global_service_health() {
 
 preflight() {
   local sample user_cpu system_cpu iowait_cpu steal_cpu idle_cpu load_one available_mib busy_cpu
-  local -a failures=()
+  local pressure_count=0
+  local -a failures=() pressure_signals=()
   docker compose config --quiet || failures+=("Compose configuration is invalid")
   systemctl is-active --quiet docker-resource-guard.service || failures+=("docker-resource-guard.service is not active")
   systemctl is-active --quiet vps-cpu-watch.timer || failures+=("vps-cpu-watch.timer is not active")
@@ -164,11 +165,18 @@ preflight() {
   available_mib="$(awk '/^MemAvailable:/ {printf "%d", $2 / 1024}' /proc/meminfo)"
   busy_cpu="$(awk -v user="$user_cpu" -v syscpu="$system_cpu" 'BEGIN {printf "%.2f", user + syscpu}')"
 
-  float_ge "$load_one" "$max_load_one" && failures+=("load 1m must stay below ${max_load_one}")
-  float_ge "$steal_cpu" "$max_steal" && failures+=("CPU steal must stay below ${max_steal}%")
-  float_le "$idle_cpu" "$min_idle" && failures+=("CPU idle must stay above ${min_idle}%")
-  float_ge "$busy_cpu" "$max_busy" && failures+=("user + system CPU must stay below ${max_busy}%")
-  float_ge "$iowait_cpu" "$max_iowait" && failures+=("CPU iowait must stay below ${max_iowait}%")
+  if float_ge "$load_one" "$max_load_one"; then pressure_signals+=("load>=${max_load_one}"); ((pressure_count += 1)); fi
+  if float_ge "$steal_cpu" 60; then failures+=("CPU steal must stay below 60%")
+  elif float_ge "$steal_cpu" "$max_steal"; then pressure_signals+=("steal>=${max_steal}%"); ((pressure_count += 1)); fi
+  if float_le "$idle_cpu" 10; then failures+=("CPU idle must stay above 10%")
+  elif float_le "$idle_cpu" "$min_idle"; then pressure_signals+=("idle<=${min_idle}%"); ((pressure_count += 1)); fi
+  if float_ge "$busy_cpu" 90; then failures+=("user + system CPU must stay below 90%")
+  elif float_ge "$busy_cpu" "$max_busy"; then pressure_signals+=("user+system>=${max_busy}%"); ((pressure_count += 1)); fi
+  if float_ge "$iowait_cpu" 50; then failures+=("CPU iowait must stay below 50%")
+  elif float_ge "$iowait_cpu" "$max_iowait"; then pressure_signals+=("iowait>=${max_iowait}%"); ((pressure_count += 1)); fi
+  if ((pressure_count >= 2)); then
+    failures+=("multiple CPU pressure signals: ${pressure_signals[*]}")
+  fi
   ((available_mib >= min_available_mib)) || failures+=("available memory must stay above ${min_available_mib} MiB")
 
   if ((${#failures[@]} > 0)); then
@@ -208,14 +216,13 @@ wait_for_health() {
 }
 
 severe_post_start_load() {
-  local sample user_cpu system_cpu iowait_cpu steal_cpu idle_cpu load_one busy_cpu
+  local sample user_cpu system_cpu iowait_cpu steal_cpu idle_cpu busy_cpu
   sample="$(sample_cpu || true)"
   [[ -n "$sample" ]] || return 0
   read -r user_cpu system_cpu iowait_cpu steal_cpu idle_cpu <<<"$sample"
-  load_one="$(awk '{print $1}' /proc/loadavg)"
   busy_cpu="$(awk -v user="$user_cpu" -v syscpu="$system_cpu" 'BEGIN {printf "%.2f", user + syscpu}')"
-  float_ge "$steal_cpu" 15 || float_ge "$busy_cpu" 60 || float_ge "$iowait_cpu" 25 || \
-    float_le "$idle_cpu" 30 || float_ge "$load_one" 4
+  float_ge "$steal_cpu" 60 || float_ge "$busy_cpu" 90 || float_ge "$iowait_cpu" 50 || \
+    float_le "$idle_cpu" 10
 }
 
 post_start_guard() {
