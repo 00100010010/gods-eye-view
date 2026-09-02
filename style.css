@@ -1658,7 +1658,9 @@ body.ui-clean-view #scene-runtime.active {
 
 /* ── Location Search ─────────────────────────── */
 .location-search-wrap {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0;
   flex-shrink: 0;
@@ -1742,6 +1744,68 @@ body.ui-clean-view #scene-runtime.active {
 
 #location-search.searching {
   opacity: 0.5;
+}
+
+#location-search::-webkit-search-cancel-button { display: none; }
+
+.location-suggestions {
+  flex: 1 0 100%;
+  max-height: min(18rem, 42dvh);
+  margin-top: 0.35rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(3, 12, 18, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 3px;
+}
+
+.location-suggestions[hidden] { display: none; }
+
+.location-suggestion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 0.5rem 0.6rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(123, 189, 211, 0.12);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.location-suggestion:last-child { border-bottom: 0; }
+
+.location-suggestion:hover,
+.location-suggestion:focus-visible,
+.location-suggestion.active {
+  color: var(--cyan);
+  background: rgba(0, 212, 255, 0.1);
+  outline: none;
+}
+
+.location-suggestion-label {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-suggestion-detail {
+  max-width: 13rem;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 7px;
+  letter-spacing: 0.08rem;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* ── Top-center Globe Actions ────────────────── */
@@ -9675,7 +9739,8 @@ body.cockpit-mode #key-setup {
   .poi-pill,
   .pp-toggle-btn,
   select,
-  input[type='text'] {
+  input[type='text'],
+  input[type='search'] {
     min-height: 44px;
   }
 
@@ -9959,6 +10024,49 @@ body.cockpit-mode #key-setup {
 
   #command-dock #location-bar .dock-popover-content {
     left: calc((var(--dock-unified-width) - (100vw - 20px)) / 2);
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-city-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+    overflow: visible;
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-search-wrap {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 0;
+    border-right: 0;
+  }
+
+  #command-dock #location-bar:not(.collapsed) #location-search {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-suggestions {
+    grid-column: 1 / -1;
+    width: 100%;
+    max-height: min(17rem, 35dvh);
+    margin-top: 0;
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-pills {
+    grid-row: 2;
+    width: 100%;
+    padding-bottom: 0.2rem;
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-suggestion {
+    min-height: 48px;
+    padding: 0.55rem 0.65rem;
+  }
+
+  #command-dock #location-bar:not(.collapsed) .location-suggestion-detail {
+    max-width: 42vw;
   }
 
   #command-dock #control-panel .dock-popover-content {

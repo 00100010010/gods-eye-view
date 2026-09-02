@@ -492,10 +492,11 @@
             <button id="search-toggle" class="search-toggle-btn" title="Search any location">
               <span>&#x1F50E;</span>
             </button>
-            <input type="text" id="location-search" placeholder="Search any location..." autocomplete="off" spellcheck="false" />
+            <input type="search" id="location-search" placeholder="Search any location..." autocomplete="off" autocapitalize="words" enterkeyhint="search" spellcheck="false" role="combobox" aria-autocomplete="list" aria-controls="location-suggestions" aria-expanded="false" />
             <button id="locate-me" class="locate-me-btn" type="button" aria-label="Use my current location" aria-busy="false" title="Use my current location">
               <img src="/location.svg" alt="" />
             </button>
+            <div id="location-suggestions" class="location-suggestions" role="listbox" aria-label="Location suggestions" hidden></div>
           </div>
         </div>
       </div>

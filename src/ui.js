@@ -23,6 +23,12 @@ import {
   searchAndFlyTo,
 } from './locations.js';
 import { requestUserLocation, userLocationErrorMessage } from './browserLocation.js';
+import {
+  curatedLocationSuggestions,
+  fetchLocationSuggestions,
+  LOCATION_AUTOCOMPLETE_DEBOUNCE_MS,
+  mergeLocationSuggestions,
+} from './locationAutocomplete.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import {
@@ -2168,6 +2174,11 @@ export class StyleManager {
     this._navigationOwnerChangedRemover = null;
     this._navigationGeneration = 0;
     this._activeLocationSearchGeneration = null;
+    this._locationSuggestionGeneration = 0;
+    this._locationSuggestionTimer = null;
+    this._locationSuggestionAbort = null;
+    this._locationSuggestionItems = [];
+    this._activeLocationSuggestionIndex = -1;
     this._initialShareState = null;
     this._initialShareNavigationGeneration = null;
     this._initialShareRestoreTimeout = null;
@@ -2326,6 +2337,7 @@ export class StyleManager {
     this._cctvSyncProgress = document.getElementById('cctv-sync-progress');
     this._toast = document.getElementById('toast');
     this._locationSearch = document.getElementById('location-search');
+    this._locationSuggestions = document.getElementById('location-suggestions');
     this._searchToggle = document.getElementById('search-toggle');
     this._locateMeBtn = document.getElementById('locate-me');
     this._locationPills = document.getElementById('location-pills');
@@ -2745,6 +2757,7 @@ export class StyleManager {
   _settleLocationSearchUi(generation) {
     if (this._activeLocationSearchGeneration !== generation) return;
     this._activeLocationSearchGeneration = null;
+    this._hideLocationSuggestions({ cancelRequest: true });
     this._locationSearch?.classList.remove('searching', 'expanded');
     if (this._locationSearch) this._locationSearch.value = '';
     this._locationSearch?.blur();
@@ -9013,6 +9026,180 @@ export class StyleManager {
     return { ok: Boolean(this._locationSearch) };
   }
 
+  _closeLocationSheetOnPhone() {
+    if (!globalThis.matchMedia?.('(max-width: 720px)')?.matches) return;
+    this.setPanelCollapsed('location-bar', true, {
+      explicit: true,
+      persist: false,
+      syncShare: false,
+    });
+  }
+
+  _hideLocationSuggestions({ cancelRequest = false } = {}) {
+    if (cancelRequest) {
+      clearTimeout(this._locationSuggestionTimer);
+      this._locationSuggestionTimer = null;
+      this._locationSuggestionAbort?.abort();
+      this._locationSuggestionAbort = null;
+      this._locationSuggestionGeneration += 1;
+    }
+    this._locationSuggestionItems = [];
+    this._activeLocationSuggestionIndex = -1;
+    if (this._locationSuggestions) {
+      this._locationSuggestions.hidden = true;
+      this._locationSuggestions.replaceChildren();
+    }
+    this._locationSearch?.setAttribute('aria-expanded', 'false');
+    this._locationSearch?.removeAttribute('aria-activedescendant');
+    this._locationSearch?.setAttribute('aria-busy', 'false');
+  }
+
+  _renderLocationSuggestions(suggestions) {
+    if (!this._locationSuggestions || !this._locationSearch) return;
+    this._locationSuggestionItems = suggestions;
+    this._activeLocationSuggestionIndex = -1;
+    this._locationSuggestions.replaceChildren();
+    if (!suggestions.length) {
+      this._hideLocationSuggestions();
+      return;
+    }
+
+    suggestions.forEach((suggestion, index) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.id = `location-suggestion-${index}`;
+      option.className = 'location-suggestion';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+
+      const label = document.createElement('span');
+      label.className = 'location-suggestion-label';
+      label.textContent = suggestion.label;
+      const detail = document.createElement('span');
+      detail.className = 'location-suggestion-detail';
+      detail.textContent = suggestion.detail || 'PLACE';
+      option.append(label, detail);
+      option.addEventListener('click', () => void this._selectLocationSuggestion(index));
+      this._locationSuggestions.appendChild(option);
+    });
+    this._locationSuggestions.hidden = false;
+    this._locationSearch.setAttribute('aria-expanded', 'true');
+  }
+
+  _moveLocationSuggestion(step) {
+    if (!this._locationSuggestionItems.length || !this._locationSuggestions) return false;
+    const length = this._locationSuggestionItems.length;
+    this._activeLocationSuggestionIndex = (this._activeLocationSuggestionIndex + step + length) % length;
+    const options = [...this._locationSuggestions.querySelectorAll('.location-suggestion')];
+    options.forEach((option, index) => {
+      const selected = index === this._activeLocationSuggestionIndex;
+      option.classList.toggle('active', selected);
+      option.setAttribute('aria-selected', String(selected));
+      if (selected) option.scrollIntoView?.({ block: 'nearest' });
+    });
+    this._locationSearch?.setAttribute(
+      'aria-activedescendant',
+      `location-suggestion-${this._activeLocationSuggestionIndex}`,
+    );
+    return true;
+  }
+
+  _scheduleLocationSuggestions() {
+    clearTimeout(this._locationSuggestionTimer);
+    this._locationSuggestionTimer = null;
+    this._locationSuggestionAbort?.abort();
+    this._locationSuggestionAbort = null;
+    const query = this._locationSearch?.value.trim() || '';
+    const generation = ++this._locationSuggestionGeneration;
+    const curated = curatedLocationSuggestions(query);
+    this._renderLocationSuggestions(curated);
+    if (query.length < 2) return;
+
+    this._locationSearch?.setAttribute('aria-busy', 'true');
+    this._locationSuggestionTimer = window.setTimeout(async () => {
+      this._locationSuggestionTimer = null;
+      const controller = new AbortController();
+      this._locationSuggestionAbort = controller;
+      try {
+        const remote = await fetchLocationSuggestions(this.viewer, query, { signal: controller.signal });
+        if (
+          this._disposed
+          || controller.signal.aborted
+          || generation !== this._locationSuggestionGeneration
+          || this._locationSearch?.value.trim() !== query
+        ) return;
+        this._renderLocationSuggestions(mergeLocationSuggestions(curated, remote));
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          // Curated results remain usable when optional provider suggestions fail.
+          console.debug('[Location] Autocomplete unavailable:', error?.message || error);
+        }
+      } finally {
+        if (this._locationSuggestionAbort === controller) this._locationSuggestionAbort = null;
+        if (generation === this._locationSuggestionGeneration) {
+          this._locationSearch?.setAttribute('aria-busy', 'false');
+        }
+      }
+    }, LOCATION_AUTOCOMPLETE_DEBOUNCE_MS);
+  }
+
+  async _selectLocationSuggestion(index) {
+    const suggestion = this._locationSuggestionItems[index];
+    if (!suggestion) return;
+    this._hideLocationSuggestions({ cancelRequest: true });
+    if (suggestion.kind === 'city') {
+      this._onCityPillClick(suggestion.cityId);
+      this._closeLocationSheetOnPhone();
+      return;
+    }
+    if (suggestion.kind === 'poi') {
+      this._onPoiClick(suggestion.cityId, suggestion.poiIndex);
+      this._closeLocationSheetOnPhone();
+      return;
+    }
+    if (this._locationSearch) this._locationSearch.value = suggestion.searchQuery || suggestion.label;
+    await this._submitLocationSearch(suggestion.searchQuery || suggestion.label);
+  }
+
+  async _submitLocationSearch(rawQuery) {
+    const query = String(rawQuery || '').trim();
+    if (!query) return { ok: false };
+    this._hideLocationSuggestions({ cancelRequest: true });
+    const generation = this._beginDeferredNavigation('location');
+    if (generation === false) {
+      this._locationSearch?.classList.remove('searching');
+      this._locationSearch?.blur();
+      return { ok: false };
+    }
+    this._activeLocationSearchGeneration = generation;
+    this._locationSearch?.classList.add('searching');
+    try {
+      const destination = await searchAndFlyTo(this.viewer, query, {
+        beforeFly: () => this._reassertNavigationHandoff(generation),
+      });
+      if (this._disposed || generation !== this._navigationGeneration) return { ok: false };
+      if (destination?.cancelled) return { ok: false };
+      if (destination) {
+        this._searchedLocationLabel = destination.label || query;
+        this._setActiveLocation(null);
+        this._currentPoi = null;
+        this._collapsePOIRow();
+        this._updateLocationMiniStatus();
+        this._closeLocationSheetOnPhone();
+        return { ok: true, destination };
+      }
+      this._showToast('Location not found');
+      return { ok: false };
+    } catch (err) {
+      console.error('[Search] Geocoding failed:', err);
+      if (this._disposed || generation !== this._navigationGeneration) return { ok: false };
+      this._showToast('Search failed');
+      return { ok: false, error: err };
+    } finally {
+      this._settleLocationSearchUi(generation);
+    }
+  }
+
   async useCurrentLocation() {
     const generation = this._beginDeferredNavigation('location');
     if (generation === false) return { ok: false };
@@ -9042,6 +9229,7 @@ export class StyleManager {
       this._showToast(Number.isFinite(accuracy)
         ? `Current location found · ±${Math.round(accuracy)} m`
         : 'Current location found');
+      this._closeLocationSheetOnPhone();
       return { ok: true, position };
     } catch (error) {
       if (this._disposed || generation !== this._navigationGeneration) return { ok: false };
@@ -9098,51 +9286,35 @@ export class StyleManager {
     // the browser and go straight to the Cesium camera.
     this._locateMeBtn?.addEventListener('click', () => void this.useCurrentLocation());
 
-    // Search submit on Enter
-    this._locationSearch.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
-        const query = this._locationSearch.value.trim();
-        if (!query) return;
-        const generation = this._beginDeferredNavigation('location');
-        if (generation === false) {
-          this._locationSearch.classList.remove('searching');
-          this._locationSearch.blur();
-          return;
+    this._locationSearch.addEventListener('input', () => this._scheduleLocationSuggestions());
+    this._locationSearch.addEventListener('focus', () => this._scheduleLocationSuggestions());
+    this._locationSearch.addEventListener('blur', () => {
+      window.setTimeout(() => {
+        if (!this._locationSuggestions?.contains(document.activeElement)) {
+          this._hideLocationSuggestions({ cancelRequest: true });
         }
-        this._activeLocationSearchGeneration = generation;
-        this._locationSearch.classList.add('searching');
-        try {
-          const destination = await searchAndFlyTo(this.viewer, query, {
-            beforeFly: () => this._reassertNavigationHandoff(generation),
-          });
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          if (destination?.cancelled) {
-            // Authority changed while the lookup was resolving; remain inert.
-          } else if (destination) {
-            // The ACTIVE STYLE indicator reports the STYLE and nothing else.
-            // Writing the searched city here made the top-right corner read
-            // "ACTIVE STYLE / TOKYO"; where the camera is belongs to the
-            // LOCATION panel's own readout, which is updated below.
-            //
-            // Set before _setActiveLocation(null) so its own mini-status
-            // refresh already sees the destination — the readout never blinks
-            // through "Location: --" on the way to the searched place.
-            this._searchedLocationLabel = destination.label || query;
-            this._setActiveLocation(null);
-            this._currentPoi = null;
-            this._collapsePOIRow();
-            this._updateLocationMiniStatus();
-          } else {
-            this._showToast('Location not found');
-          }
-        } catch (err) {
-          console.error('[Search] Geocoding failed:', err);
-          if (this._disposed || generation !== this._navigationGeneration) return;
-          this._showToast('Search failed');
-        } finally {
-          this._settleLocationSearchUi(generation);
-        }
+      }, 120);
+    });
+
+    // Search submit and combobox keyboard navigation.
+    this._locationSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (this._moveLocationSuggestion(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
+        return;
       }
+      if (e.key === 'Escape' && !this._locationSuggestions?.hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._hideLocationSuggestions({ cancelRequest: true });
+        return;
+      }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (this._activeLocationSuggestionIndex >= 0) {
+        void this._selectLocationSuggestion(this._activeLocationSuggestionIndex);
+        return;
+      }
+      void this._submitLocationSearch(this._locationSearch.value);
     });
   }
 
@@ -9888,6 +10060,11 @@ export class StyleManager {
     this._globalStatusNotice = null;
     if (this._globalLoadingStatus) this._globalLoadingStatus.hidden = true;
     this._disposed = true;
+    clearTimeout(this._locationSuggestionTimer);
+    this._locationSuggestionTimer = null;
+    this._locationSuggestionAbort?.abort();
+    this._locationSuggestionAbort = null;
+    this._locationSuggestionGeneration += 1;
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;

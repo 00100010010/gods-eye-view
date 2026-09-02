@@ -44,6 +44,15 @@ test('mobile panels are transient one-at-a-time sheets with four exit paths', ()
   assert.match(css, /bottom: max\(calc\(2vh \+ 7\.5rem\), calc\(env\(safe-area-inset-bottom\) \+ 7\.5rem\)\) !important/);
 });
 
+test('mobile Location is an accessible autocomplete sheet sized for touch', () => {
+  assert.match(html, /type="search"[^>]*id="location-search"[^>]*role="combobox"/);
+  assert.match(html, /id="location-search"[^>]*aria-controls="location-suggestions"/);
+  assert.match(html, /id="location-suggestions"[^>]*role="listbox"/);
+  assert.match(css, /#command-dock #location-bar:not\(\.collapsed\) \.location-city-row \{[\s\S]*?display: grid !important/);
+  assert.match(css, /#command-dock #location-bar:not\(\.collapsed\) \.location-search-wrap \{[\s\S]*?grid-template-columns: 44px minmax\(0, 1fr\) 44px/);
+  assert.match(css, /#command-dock #location-bar:not\(\.collapsed\) \.location-suggestion \{[\s\S]*?min-height: 48px/);
+});
+
 test('failed map artwork is replaced by a persistent accessible message', () => {
   assert.match(html, /id="map-source-notice" role="alert"[^>]*hidden/);
   assert.match(html, /id="map-source-retry"/);
