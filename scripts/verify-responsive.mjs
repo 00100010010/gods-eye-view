@@ -132,11 +132,6 @@ try {
       await page.click('#mobile-command-nav [data-mobile-panel="location-bar"]');
       await page.waitForFunction(() => !document.querySelector('#location-bar')?.classList.contains('collapsed'));
       await waitForHitTarget(page, '#locate-me');
-      await page.click('#locate-me');
-      await page.waitForFunction(() => (
-        document.querySelector('#location-mini-city')?.textContent?.includes('My location')
-        && document.querySelector('#locate-me')?.getAttribute('aria-busy') === 'false'
-      ), { timeout: 15_000 });
       const locationClose = await page.$eval(
         '#location-bar .dock-tray-close',
         (element) => {
@@ -144,7 +139,16 @@ try {
           return { width: Math.round(rect.width), height: Math.round(rect.height) };
         },
       );
-      await page.click('#location-bar .dock-tray-close');
+      await page.click('#locate-me');
+      await page.waitForFunction(() => (
+        document.querySelector('#location-mini-city')?.textContent?.includes('My location')
+        && document.querySelector('#locate-me')?.getAttribute('aria-busy') === 'false'
+      ), { timeout: 15_000 });
+      const locationStillOpen = await page.$eval(
+        '#location-bar',
+        (element) => !element.classList.contains('collapsed'),
+      );
+      if (locationStillOpen) await page.click('#location-bar .dock-tray-close');
       await page.waitForFunction(() => document.querySelector('#location-bar')?.classList.contains('collapsed'));
 
       await page.click('#mobile-more-toggle');
@@ -234,10 +238,13 @@ try {
         });
       const smallControls = visibleControls.map((element) => {
         const rect = element.getBoundingClientRect();
+        const touchTargetHeight = Number.parseFloat(
+          getComputedStyle(element).getPropertyValue('--touch-target-height'),
+        );
         return {
           name: element.id || element.getAttribute('aria-label') || element.textContent.trim().slice(0, 28),
           width: Math.round(rect.width),
-          height: Math.round(rect.height),
+          height: Math.round(Math.max(rect.height, touchTargetHeight || 0)),
         };
       }).filter(({ width, height }) => width < 40 || height < 40);
 
