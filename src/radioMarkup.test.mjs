@@ -21,17 +21,18 @@ function realtimeTools() {
   return new Function(`return ${literal};`)();
 }
 
-test('Realtime schema exposes the authoritative 26-tool inventory', () => {
+test('Realtime schema exposes the authoritative 25-tool inventory', () => {
   const tools = realtimeTools();
-  assert.equal(tools.length, 26);
+  assert.equal(tools.length, 25);
   const names = tools.map((tool) => tool.name);
-  assert.equal(new Set(names).size, 26, 'tool names are unique');
+  assert.equal(new Set(names).size, 25, 'tool names are unique');
   assert.ok(names.includes('set_context_mode'));
   assert.ok(names.includes('control_cockpit'));
   assert.ok(names.includes('select_nearest_aircraft'));
   assert.ok(names.includes('control_radio'));
   assert.ok(!names.includes('set_visual_style'));
   assert.ok(!names.includes('control_scene'));
+  assert.ok(!names.includes('set_hud'));
   // Every tool closes its parameter object: an open schema lets the model
   // invent arguments the runner silently drops.
   for (const tool of tools) {
@@ -143,7 +144,7 @@ test('the edited existing tools changed exactly as intended', () => {
   const panel = byName.get('set_panel_open');
   assert.deepEqual(
     panel.parameters.properties.panelId.enum,
-    ['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'pp-toggles', 'global-context-panel'],
+    ['data-panel', 'location-bar', 'control-panel', 'radio-panel', 'pp-toggles', 'global-context-panel'],
   );
   assert.deepEqual(panel.parameters.required, ['panelId', 'open']);
 
@@ -177,16 +178,17 @@ test('no unchanged Realtime tool definition drifts silently', () => {
     'select_nearest_aircraft',
     'set_map_stack',
     'set_post_processing',
+    'control_cctv',
   ]);
   const unchanged = realtimeTools()
     .filter((tool) => !TOUCHED.has(tool.name))
     .sort((a, b) => a.name.localeCompare(b.name));
-  assert.equal(unchanged.length, 18);
+  assert.equal(unchanged.length, 16);
   const digest = createHash('sha256')
     .update(JSON.stringify(unchanged))
     .digest('hex')
     .slice(0, 16);
-  assert.equal(digest, '6d67db3d02327ec1', 'an unchanged Realtime tool definition drifted');
+  assert.equal(digest, '9f1ba0793e679c46', 'an unchanged Realtime tool definition drifted');
 });
 
 test('Radio volume and mission speed share the Sharpen slider visual language', () => {

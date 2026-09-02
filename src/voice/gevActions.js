@@ -29,8 +29,6 @@ const PANEL_ALIASES = new Map([
   ['data layer menu', 'data-panel'],
   ['locations', 'location-bar'],
   ['location', 'location-bar'],
-  ['cctv', 'cctv-panel'],
-  ['cameras', 'cctv-panel'],
   ['radio', 'radio-panel'],
   ['internet radio', 'radio-panel'],
   ['radio stations', 'radio-panel'],
@@ -40,7 +38,6 @@ const PANEL_ALIASES = new Map([
   ['right context', 'global-context-panel'],
   ['context right panel', 'global-context-panel'],
   ['post processing', 'pp-toggles'],
-  ['hud controls', 'pp-toggles'],
   ['map stack', 'control-panel'],
   ['stack', 'control-panel'],
   ['basemap', 'control-panel'],
@@ -48,7 +45,7 @@ const PANEL_ALIASES = new Map([
   ['sources', 'control-panel'],
 ]);
 
-const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'pp-toggles']);
+const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'radio-panel', 'global-context-panel', 'pp-toggles']);
 const CONTEXT_MODE_ALIASES = new Map([
   ['off', 'off'],
   ['none', 'off'],
@@ -828,21 +825,6 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, annot
       return getCurrentViewState(viewer, styleManager, dataManager);
     }
 
-    if (name === 'set_hud') {
-      const out = { ok: true, action: 'set_hud' };
-      if (args.layout != null) {
-        const result = styleManager.setHudLayout(args.layout);
-        if (!result.ok) return { ...result, action: 'set_hud' };
-        Object.assign(out, result);
-      }
-      if (args.visible != null) {
-        const result = styleManager.setHudVisible(args.visible);
-        if (!result.ok) return { ...result, action: 'set_hud' };
-        Object.assign(out, result);
-      }
-      return { ...out, hud: styleManager.getControlState().hud };
-    }
-
     if (name === 'set_detection') {
       const result = styleManager.setDetection({
         enabled: typeof args.enabled === 'boolean' ? args.enabled : undefined,
@@ -1049,8 +1031,6 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
       cameraCount: Array.isArray(ui.cameras) ? ui.cameras.length : (ui.count || 0),
       showCoverage: !!ui.showCoverage,
       coverageMode: ui.coverageMode || (ui.showCoverage ? 'on' : 'off'),
-      showProjection: !!ui.showProjection,
-      calibrationMode: !!ui.calibrationMode,
       autoHop: !!ui.autoHop,
     };
   };
@@ -1116,20 +1096,14 @@ export async function controlCctv(dataManager, args = {}, styleManager = null) {
     dataManager.setLayerParams('cctv', { coverageMode: next }, { origin: 'voice' });
     return { ok: true, action: 'control_cctv', ...summarize() };
   }
-  if (action === 'adjust') {
-    const current = summarize();
-    const next = typeof args.enabled === 'boolean' ? args.enabled : !current.calibrationMode;
-    dataManager.setLayerParams('cctv', { calibrationMode: next }, { origin: 'voice' });
-    return { ok: true, action: 'control_cctv', ...summarize() };
-  }
   if (action === 'coverage') {
     const current = summarize();
     const next = typeof args.enabled === 'boolean' ? args.enabled : !current.showCoverage;
     dataManager.setLayerParams('cctv', { coverageMode: next ? 'on' : 'off' }, { origin: 'voice' });
     return { ok: true, action: 'control_cctv', ...summarize() };
   }
-  if (action === 'projection' || action === 'autohop') {
-    const key = action === 'projection' ? 'showProjection' : 'autoHop';
+  if (action === 'autohop') {
+    const key = 'autoHop';
     const current = summarize();
     const next = typeof args.enabled === 'boolean' ? args.enabled : !current[key];
     dataManager.setLayerParams('cctv', { [key]: next }, { origin: 'voice' });

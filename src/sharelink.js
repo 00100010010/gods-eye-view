@@ -28,7 +28,6 @@ const SHARE_PANEL_STATE_REGISTRY = Object.freeze([
   { id: 'control-panel', token: 'c', pinnable: true },
   { id: 'location-bar', token: 'l', pinnable: true },
   { id: 'data-panel', token: 'd', pinnable: false },
-  { id: 'cctv-panel', token: 'v', pinnable: false },
   { id: 'radio-panel', token: 'r', pinnable: false },
   { id: 'global-context-panel', token: 'g', pinnable: false },
   { id: 'pp-toggles', token: 'p', pinnable: false },
@@ -99,7 +98,7 @@ export class ShareLinkManager {
     // state the link THIS session generates starts from, so it must match what
     // the session actually renders; the `ko` PARSE fallback below is a separate
     // question and deliberately stays at 5.
-    this._detectionOutsideOpacityPct = 1;
+    this._detectionOutsideOpacityPct = 7;
     this._celestialRingEnabled = false;
     this._mapStack = 'photoreal';
     this._layerStateProvider = null;
@@ -184,6 +183,8 @@ export class ShareLinkManager {
       // the field — so nothing from the 5 % era depends on this number either
       // way. The first-run default is a different question, answered in
       // celestialRing.js.
+      // Links from before `ko` existed retain the 5% view their authors saw;
+      // fresh sessions and newly generated links use the current 7% default.
       detectionOutsideOpacityPct: Math.max(0, Math.min(100, Math.round(parseOr(params.get('ko'), 5)))),
       celestialRing: params.has('cr') ? params.get('cr') === '1' : false,
       mapStack: params.get('map') || 'photoreal',

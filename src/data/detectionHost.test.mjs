@@ -694,13 +694,13 @@ test('detection cannot resurrect a private canvas, listener, matrix, resize, cle
   // three times" — same guarantee, and the copies can no longer drift.
   assert.match(
     uiSource,
-    /const MILITARY_DETECTION_PRESET = Object\.freeze\(\{ mode: 'dense', densityPct: 75 \}\);/,
-    'the tactical detection default is still Dense @ 75%',
+    /const MILITARY_DETECTION_PRESET = Object\.freeze\(\{ mode: 'sparse', densityPct: 25 \}\);/,
+    'the shared detection default is Sparse @ 25%',
   );
   assert.equal(
     uiSource.match(/detection: MILITARY_DETECTION_PRESET,/g)?.length,
     3,
-    'CRT, NVG, and FLIR retain their Dense auto-enable defaults',
+    'legacy style paths retain the shared Sparse auto-enable default',
   );
   assert.match(uiSource, /preset\.detection && !this\._detectionUserOverridden/);
 });

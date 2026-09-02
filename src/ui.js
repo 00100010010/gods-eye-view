@@ -29,7 +29,6 @@ import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
-import { IntelHUD } from './hud.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   isExplicitLayerStateOrigin,
@@ -198,6 +197,22 @@ import {
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
+/** No-op compatibility surface for retired HUD share/automation state. */
+class RetiredHud {
+  constructor() {
+    this.visible = false;
+    this.variant = 'tactical';
+  }
+
+  setMode() { this.visible = false; }
+  toggle() { this.visible = false; }
+  setVariant(variant) { this.variant = variant === 'minimal' ? 'minimal' : 'tactical'; }
+  getVariant() { return this.variant; }
+  getMode() { return 'off'; }
+  onStyleChange() {}
+  attachDataManager() {}
+  destroy() {}
+}
 /** Map of style name to its GLSL shader module for post-process stages. */
 const STYLES = { retro: retroShader, surveillance: nightVisionShader, thermal: thermalShader, anime: animeShader, noir: noirShader, snow: snowShader };
 /** Versioned localStorage namespace prefix to invalidate stale panel layouts. */
@@ -206,7 +221,6 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'control-panel', pinnable: true },
   { id: 'location-bar', pinnable: true },
   { id: 'data-panel' },
-  { id: 'cctv-panel' },
   { id: 'radio-panel' },
   { id: 'global-context-panel' },
   { id: 'pp-toggles' },
@@ -215,7 +229,6 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
 /** Standard map-view panels cleared out of the way on a fresh Cockpit entry. */
 const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
   'data-panel',
-  'cctv-panel',
   'pp-toggles',
   'global-context-panel',
   'radio-panel',
@@ -285,14 +298,6 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
-  '#intel-hud .hud-top-left',
-  '#intel-hud .hud-top-right',
-  '#intel-hud .hud-bottom-left',
-  '#intel-hud .hud-bottom-right',
-  '#intel-hud .hud-top-bar',
-  '#intel-hud .hud-bottom-bar',
-  '#intel-hud .hud-left-edge',
-  '#intel-hud .hud-right-edge',
   '#cockpit-context',
   '#cesium-credits .cesium-credit-logoContainer',
   '#cesium-credits .cesium-credit-textContainer',
@@ -305,9 +310,8 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
 /**
  * Whether an element currently occupies screen space a layout must respect.
  *
- * A rect alone is not enough: `visibility: hidden` and `opacity: 0` (how the
- * Intel HUD retires as a whole) leave the rect intact, so anything anchoring to
- * a HUD readout must walk the ancestors as well.
+ * A rect alone is not enough: hidden or transparent ancestors leave the rect
+ * intact, so measured layout obstacles must walk the ancestor chain as well.
  *
  * @param {Element|null|undefined} element - Candidate element.
  * @returns {boolean} True when the element is painted and has area.
@@ -325,8 +329,8 @@ function isRenderedOnScreen(element) {
 }
 /**
  * Fixed UI regions that can occupy the right control lane. Runtime rectangle
- * filtering keeps the rail clear of whichever HUD variant is currently
- * visible without tying the layout to one screen height.
+ * filtering keeps the rail clear of live controls without tying the layout to
+ * one screen height.
  */
 const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#cockpit-hud .cockpit-topline',
@@ -334,14 +338,6 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#top-center-actions',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
-  '#intel-hud .hud-top-left',
-  '#intel-hud .hud-top-right',
-  '#intel-hud .hud-bottom-left',
-  '#intel-hud .hud-bottom-right',
-  '#intel-hud .hud-top-bar',
-  '#intel-hud .hud-bottom-bar',
-  '#intel-hud .hud-left-edge',
-  '#intel-hud .hud-right-edge',
   '#cockpit-context',
   '#cockpit-signal-stream',
   '#cesium-credits .cesium-credit-logoContainer',
@@ -359,31 +355,13 @@ const STYLE_STATUS_LABELS = {
   noir: 'NOIR',
   snow: 'SNOW',
 };
-/**
- * The tactical detection look: Dense at 75%.
- *
- * Owner playtest 2026-08-18: "detection mode… 75% weighted, with the 16% fade
- * and 5% outside, whatever we had. I want that as the default. It should just
- * happen." Fade and outside opacity live in GLOBAL_POST_DEFAULTS, so "whatever
- * we had" still needs nothing here — but they are 7% and 1% now, the outside
- * default having moved 5 → 3 → 1 as the owner locked final tuning after field trials (2026-08-24). What the quote asked for is the
- * baseline of the day, not the two numbers it happened to name.
- *
- * ONE object, shared by the first-load baseline below, by every military style,
- * AND by the Contacts context mode (which OWNS detection while active and
- * restores the prior state on exit — see contactsDetectionPolicy.js). Cockpit
- * deliberately does NOT touch detection: entering it with SPARSE selected leaves
- * SPARSE. Declared ahead of GLOBAL_POST_DEFAULTS because that baseline now reads
- * from it.
- */
-const MILITARY_DETECTION_PRESET = Object.freeze({ mode: 'dense', densityPct: 75 });
+/** Shared first-load and Contacts detection baseline. */
+const MILITARY_DETECTION_PRESET = Object.freeze({ mode: 'sparse', densityPct: 25 });
 
 /** Baseline post-processing settings applied on first load (before share-link restore). */
 const GLOBAL_POST_DEFAULTS = {
   bloom: { enabled: false, intensity: BLOOM_INTENSITY_DEFAULT },
   sharpen: { enabled: true, intensity: 49 },
-  hudVariant: 'tactical',
-  hudVisible: true,
   // Detection is ON for EVERY style on a first run, Normal included (owner
   // directive 2026-08-22: "detect should also be on by default"). It is the
   // same preset object the military styles and Contacts already apply, so there
@@ -399,11 +377,11 @@ const GLOBAL_POST_DEFAULTS = {
   detectionDensity: MILITARY_DETECTION_PRESET.densityPct,
   detectionAllocation: 'ELASTIC',
   detectionFadePct: 7,
-  detectionOutsideOpacityPct: 1,
+  detectionOutsideOpacityPct: 7,
   celestialRing: false,
 };
 
-// Tactical style defaults applied when users select military style presets.
+// Legacy style defaults retained for old share links.
 const STYLE_PRESET_DEFAULTS = {
   retro: {
     bloom: { enabled: false, intensity: BLOOM_INTENSITY_DEFAULT },
@@ -415,8 +393,7 @@ const STYLE_PRESET_DEFAULTS = {
         instability: 0.42,
       },
     },
-    hudVariant: 'tactical',
-    hudVisible: true,
+    hudVisible: false,
     detection: MILITARY_DETECTION_PRESET,
   },
   surveillance: {
@@ -430,8 +407,7 @@ const STYLE_PRESET_DEFAULTS = {
         pixelation: 1.0,
       },
     },
-    hudVariant: 'tactical',
-    hudVisible: true,
+    hudVisible: false,
     detection: MILITARY_DETECTION_PRESET,
   },
   thermal: {
@@ -445,8 +421,7 @@ const STYLE_PRESET_DEFAULTS = {
         pixelation: 1.0,
       },
     },
-    hudVariant: 'tactical',
-    hudVisible: true,
+    hudVisible: false,
     detection: MILITARY_DETECTION_PRESET,
   },
 };
@@ -2055,13 +2030,8 @@ class CockpitViewController {
       // Cockpit owns this anchor outright. The strip used to inherit the left
       // accordion's committed top, which is solved against left-lane obstacles
       // and dropped the strip straight through the briefing card below it.
-      // The readout only anchors the strip while it is genuinely on screen:
-      // the Minimal variant drops it with `display:none`, but HUD Off hides the
-      // whole Intel HUD with `visibility`/`opacity`, which keeps its rect.
-      const recReadout = document.querySelector('#intel-hud .hud-top-right');
-      const recBounds = isRenderedOnScreen(recReadout) ? recReadout.getBoundingClientRect() : null;
       const utilityAnchor = resolveCockpitUtilityAnchor({
-        recBottom: recBounds ? recBounds.bottom : 0,
+        recBottom: 0,
         signalTop: signalBounds.top,
         stripHeight: utilityBounds.height,
         viewportHeight: window.innerHeight,
@@ -2383,7 +2353,9 @@ export class StyleManager {
     this._orbitIndicator = null;
 
     // Intel HUD
-    this.hud = new IntelHUD(viewer);
+    // Keep the compatibility facade for old share links and automation, but
+    // retire the decorative intelligence overlay and all of its background work.
+    this.hud = new RetiredHud();
     this._cockpitVisionMode = 'optical';
     this._cockpitVisionRestore = null;
     this._cockpitPanelRestore = null;
@@ -3011,15 +2983,14 @@ export class StyleManager {
       styleOwnsDetection: !this._detectionUserOverridden
         && Boolean(STYLE_PRESET_DEFAULTS[this.activeStyle]?.detection),
       // The snapshot must cover everything activation mutates — the preset
-      // writes DENSITY as well as mode, so a mode-only snapshot returned
-      // OFF @ 25% as OFF @ 75% and the next manual enable came back Dense.
+      // writes DENSITY as well as mode, so the snapshot must retain both.
       getState: () => {
         const state = this.getDetectionState();
         return { mode: state.detectionMode, densityPct: state.densityPct };
       },
       // Owner playtest: the force-on lands on the tactical look the military
       // styles apply — the SAME preset object — not on whatever profile the
-      // operator last happened to leave detection at.
+      // user last happened to leave detection at.
       applyPreset: () => this._applyDetectionPreset(MILITARY_DETECTION_PRESET),
       // The preset applier IS the state replayer: same density-then-mode order,
       // same slider writes, so a restore round-trips exactly.
@@ -3033,8 +3004,8 @@ export class StyleManager {
     // not the detection engine itself moved — and it does not always move.
     // Exiting while a military style owns detection returns changed:false (the
     // style's preset already matches), and returning early there left a copied
-    // link claiming the operator's pre-Contacts values while the map showed
-    // Dense @ 75%.
+    // link claiming the user's pre-Contacts values while the map showed the
+    // shared temporary preset.
     if (!shareCacheNeedsHeal({
       changed: result.changed,
       hadOwnership,
@@ -3308,12 +3279,6 @@ export class StyleManager {
           this._locationSearch.value = '';
           this._locationSearch.blur();
         }
-      }
-      if (e.key.toLowerCase() === 'h') {
-        this.shareLinkManager?.claimRestoreLane?.('visual');
-        this.hud.toggle();
-        this._updateHudButtonState();
-        this._syncShareState();
       }
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
@@ -3721,7 +3686,7 @@ export class StyleManager {
       this._detectionFadeSlider.value = String(defaults.detectionFadePct ?? 7);
     }
     if (this._detectionOpacitySlider) {
-      this._detectionOpacitySlider.value = String(defaults.detectionOutsideOpacityPct ?? 1);
+      this._detectionOpacitySlider.value = String(defaults.detectionOutsideOpacityPct ?? 7);
     }
     this._applyDetectionFadeFromUi();
     if (typeof defaults.celestialRing === 'boolean') {
@@ -3737,10 +3702,10 @@ export class StyleManager {
   /**
    * Detection as a DURABLE preference, for serialization into a share link.
    *
-   * While Contacts is active it OWNS detection and forces Dense @ 75%. That is
-   * a session-scoped override, not something the operator chose: it is undone
+   * While Contacts is active it owns detection and forces the shared preset. That is
+   * a session-scoped override, not something the user chose: it is undone
    * verbatim on deactivation. Serializing the forced values shipped a link that
-   * pinned Dense @ 75% on the recipient — as a durable preference, with no
+   * pinned the temporary preset on the recipient — as a durable preference, with no
    * Contacts mode present to explain or undo it — even though the author's own
    * setting was (say) OFF @ 50%. Publish what deactivation would restore.
    *
@@ -3767,7 +3732,7 @@ export class StyleManager {
       detectionDensity: detection.densityPct,
       detectionAllocation: getDetectionTuning().allocationStrategy,
       detectionFadePct: parseInt(this._detectionFadeSlider?.value || '7', 10),
-      detectionOutsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '1', 10),
+      detectionOutsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '7', 10),
       celestialRingEnabled: this.celestialRingEnabled,
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
     });
@@ -4785,9 +4750,9 @@ export class StyleManager {
   /**
    * Claim the visual restore lane for an explicit Context transition.
    *
-   * Contacts OWNS detection while active (forced Dense @ 75%), so entering or
+   * Contacts owns detection while active, so entering or
    * leaving it is a visual-lane gesture exactly like the HUD or detection
-   * controls. Without this claim, the shared-view restore that lands 1.5 s into
+   * controls. Without this claim, the shared-view restore that lands during
    * startup re-applied the link's `dm`/`dd` over the forced preset and Contacts
    * lost its own overlay mid-session.
    *
@@ -6453,20 +6418,7 @@ export class StyleManager {
     const activeId = state?.activeCameraId || '';
     const activeCamera = state?.activeCamera || null;
 
-    // Auto-expand the panel when the active camera CHANGES to a new non-null
-    // id while the layer is enabled. Covers click-on-globe, panel controls,
-    // and voice (selectCamera/cycleCamera/focusNearest all notify through
-    // this subscription). The last-seen guard keeps routine notifications
-    // from re-expanding a panel the user deliberately collapsed, and timed
-    // auto-hop transitions only expand on the first activation so the panel
-    // does not pop open on every hop.
     const effectiveActiveId = enabled ? (activeId || null) : null;
-    const isFirstActivation = this._lastSeenCctvActiveId === null;
-    if (effectiveActiveId
-      && effectiveActiveId !== this._lastSeenCctvActiveId
-      && (!state?.autoHop || isFirstActivation)) {
-      this.setPanelCollapsed('cctv-panel', false, { explicit: Boolean(state?.explicitSelection) });
-    }
     this._lastSeenCctvActiveId = effectiveActiveId;
 
     this._updateCctvSyncChip(state?.loading, enabled);
@@ -6741,24 +6693,6 @@ export class StyleManager {
         attributes: true,
         attributeFilter: ['class', 'hidden', 'data-variant'],
       });
-      const hud = document.getElementById('intel-hud');
-      if (hud) {
-        this._rightStackMutationObserver.observe(hud, {
-          subtree: true,
-          attributes: true,
-          attributeFilter: ['class', 'hidden', 'data-variant'],
-        });
-      }
-    }
-
-    const transitionHud = document.getElementById('intel-hud');
-    if (transitionHud) {
-      this._rightStackHudTransitionHandler = (event) => {
-        if (event.propertyName === 'opacity' || event.propertyName === 'visibility') {
-          this._scheduleRightPanelLayout({ reconsiderAutoCollapse: true });
-        }
-      };
-      transitionHud.addEventListener('transitionend', this._rightStackHudTransitionHandler);
     }
 
     this._scheduleRightPanelLayout();
@@ -7008,13 +6942,6 @@ export class StyleManager {
         attributes: true,
         attributeFilter: ['class'],
       });
-      const hud = document.getElementById('intel-hud');
-      if (hud) {
-        this._leftStackMutationObserver.observe(hud, {
-          attributes: true,
-          attributeFilter: ['class', 'data-variant'],
-        });
-      }
       const credits = document.getElementById('cesium-credits');
       if (credits) {
         this._leftStackMutationObserver.observe(credits, {
@@ -7024,19 +6951,6 @@ export class StyleManager {
       }
     }
 
-    const transitionHud = document.getElementById('intel-hud');
-    if (transitionHud) {
-      this._leftStackHudTransitionHandler = (event) => {
-        if (event.propertyName === 'opacity' || event.propertyName === 'visibility') {
-          this._scheduleLeftPanelLayout({ reconsiderAutoCollapse: true });
-          // The Cockpit strip hangs off the HUD's REC readout, so it has to
-          // remeasure on the same event: the readout keeps its rect through
-          // the whole fade and only stops counting once the HUD has retired.
-          this.cockpitView?.scheduleContextLayout();
-        }
-      };
-      transitionHud.addEventListener('transitionend', this._leftStackHudTransitionHandler);
-    }
 
     this._leftStackCockpitModeHandler = () => {
       // Cockpit mode repositions the peripheral HUD and reveals its own
@@ -7720,30 +7634,16 @@ export class StyleManager {
    * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
    */
   setHudVisible(mode) {
-    const normalized = String(mode ?? '').toLowerCase();
-    if (!['on', 'off', 'auto'].includes(normalized)) {
-      return { ok: false, error: `Unknown HUD visibility mode: ${mode}` };
-    }
-    this.shareLinkManager?.claimRestoreLane?.('visual');
-    this.hud.setMode(normalized);
-    this._updateHudButtonState();
-    this._syncShareState();
-    return { ok: true, visible: !!this.hud.visible, mode: normalized, layout: this.hud.getVariant() };
+    return { ok: false, visible: false, error: 'HUD has been removed' };
   }
 
   /**
    * Switches the HUD layout variant.
-   * @param {'tactical'|'operator'|'minimal'} variantName - Layout variant.
+   * @param {'tactical'|'minimal'} variantName - Legacy layout variant.
    * @returns {{ok: boolean, layout?: string, visible?: boolean, error?: string}}
    */
   setHudLayout(variantName) {
-    const variant = String(variantName ?? '').toLowerCase();
-    if (!['tactical', 'operator', 'minimal'].includes(variant)) {
-      return { ok: false, error: `Unknown HUD layout: ${variantName}` };
-    }
-    this.shareLinkManager?.claimRestoreLane?.('visual');
-    this._setHudVariant(variant);
-    return { ok: true, layout: this.hud.getVariant(), visible: !!this.hud.visible };
+    return { ok: false, visible: false, error: 'HUD layouts have been removed' };
   }
 
   /**
@@ -7759,7 +7659,7 @@ export class StyleManager {
       densityPct: pct,
       allocationStrategy: getDetectionTuning().allocationStrategy,
       fadePct: parseInt(this._detectionFadeSlider?.value || '7', 10),
-      outsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '0', 10),
+      outsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '7', 10),
     };
   }
 
@@ -8412,13 +8312,12 @@ export class StyleManager {
   /**
    * Full control-state snapshot — single source for voice read-back so the
    * agent confirms from the same state it acted on.
-   * @returns {object} Current style/stack/HUD/detection/post-processing state.
+   * @returns {object} Current style/stack/detection/post-processing state.
    */
   getControlState() {
     return {
       style: this.activeStyle || 'normal',
       mapStack: this.mapStackController?.getActiveId?.() || null,
-      hud: { visible: !!this.hud?.visible, layout: this.hud?.getVariant?.() || null },
       detection: this.getDetectionState(),
       sharpen: {
         enabled: !!this.sharpenEnabled,
@@ -8506,7 +8405,7 @@ export class StyleManager {
         density: parseInt(this._detectionDensitySlider?.value || '50', 10),
         allocation: getDetectionTuning().allocationStrategy,
         fadePct: parseInt(this._detectionFadeSlider?.value || '7', 10),
-        outsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '0', 10),
+        outsideOpacityPct: parseInt(this._detectionOpacitySlider?.value || '7', 10),
       },
       mapStack: this.mapStackController?.getActiveId?.() || 'photoreal',
       styleParams,
@@ -8742,7 +8641,7 @@ export class StyleManager {
         this._safeFrameOverlay.classList.remove('active', 'ratio-9-16', 'ratio-16-9');
       }
     }
-    this._hudBtn.classList.toggle('active', this.hud.visible);
+    this._hudBtn?.classList.toggle('active', this.hud.visible);
     this._syncShareState();
   }
 
@@ -9760,19 +9659,7 @@ export class StyleManager {
   }
 
   _initHUDToggle() {
-    this._hudBtn.addEventListener('click', () => {
-      this.shareLinkManager?.claimRestoreLane?.('visual');
-      this.hud.toggle();
-      this._updateHudButtonState();
-      this._syncShareState();
-    });
-
-    if (this._hudLayoutSelect) {
-      this._hudLayoutSelect.value = 'tactical';
-    }
-    this._setHudVariant('tactical');
-    this.hud.setMode('on');
-    this._updateHudButtonState();
+    this.hud.setMode('off');
 
     // Detection toggle button
     this._detectionBtn.addEventListener('click', () => {
@@ -9796,7 +9683,6 @@ export class StyleManager {
    */
   _initCockpitDisplayPortal() {
     const definitions = [
-      ['hud', this._hudBtn?.closest('.pp-toggle-group')],
       ['detection', this._detectionBtn?.closest('.pp-toggle-group')],
       ['parameters', this._sliderPanel],
       ['models3d', this._models3dBtn?.closest('.pp-toggle-group')],
@@ -9832,8 +9718,8 @@ export class StyleManager {
   }
 
   /**
-   * Moves the shared HUD, Detection, Parameters, and 3D controls into or out
-   * of Cockpit.
+   * Moves the shared Detection, Parameters, and 3D controls into or out of
+   * Cockpit.
    * @param {boolean} active Whether Cockpit owns the Display control groups.
    * @returns {void}
    */
@@ -9887,7 +9773,7 @@ export class StyleManager {
    * @returns {void}
    */
   _updateHudButtonState() {
-    this._hudBtn.classList.toggle('active', this.hud.visible);
+    this._hudBtn?.classList.toggle('active', this.hud.visible);
     if (this._hudLayoutRow) {
       this._hudLayoutRow.classList.toggle('visible', this.hud.visible);
     }

@@ -996,7 +996,7 @@ test('pristine module default publishes no active-camera card (shipped behavior 
   }
 });
 
-test('active CCTV camera is absent from host by default and protected only when opted in', () => {
+test('active CCTV camera stays icon-only even when a legacy caller requests a card', () => {
   const publications = [];
   const activeRecord = {
     camera: { id: 'active-camera', name: 'ACTIVE CAMERA' },
@@ -1022,15 +1022,41 @@ test('active CCTV camera is absent from host by default and protected only when 
 
     assert.deepEqual(
       cctvLayer.setCardPresentationOptions({ activeCameraCardEnabled: true }),
-      { activeCameraCardEnabled: true },
+      { activeCameraCardEnabled: false },
     );
-    const activeEntry = publications.at(-1).entries.find(({ id }) => id === activeRecord.camera.id);
-    assert.ok(activeEntry, 'opt-in republishes the active camera into the host');
-    assert.equal(activeEntry.active, true);
-    assert.equal(activeEntry.protected, true);
+    assert.deepEqual(
+      publications.at(-1),
+      { sourceId: 'cctv', entries: [] },
+      'legacy options cannot restore video cards on the map',
+    );
   } finally {
     setCctvCardPresentationOptions({ activeCameraCardEnabled: false });
     _setCctvOverlayHostForTest();
+    _setCctvCoverageStateForTest({ enabled: false });
+  }
+});
+
+test('CCTV settings live on its Layers row without calibration or projection controls', () => {
+  const activeRecord = {
+    camera: { id: 'layer-camera', name: 'LAYER CAMERA', city: 'London' },
+    position: { x: 1, y: 2, z: 3 },
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [activeRecord],
+      activeCameraId: activeRecord.camera.id,
+      enabled: true,
+      coverageMode: 'off',
+    });
+    const controls = cctvLayer.getRowControls();
+    assert.deepEqual(
+      controls.chips.map(({ id }) => id),
+      ['nearest', 'previous', 'next', 'focus', 'coverage', 'auto-hop'],
+    );
+    assert.equal(controls.chips.find(({ id }) => id === 'coverage')?.label, 'COVERAGE OFF');
+    assert.equal(controls.chips.find(({ id }) => id === 'auto-hop')?.label, 'AUTO HOP OFF');
+    assert.deepEqual(cctvLayer.getDetectableObjects(), [], 'Detection must not add a second map label');
+  } finally {
     _setCctvCoverageStateForTest({ enabled: false });
   }
 });

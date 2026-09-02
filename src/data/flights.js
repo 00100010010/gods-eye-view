@@ -398,6 +398,12 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
     label: _contactLabel(icao24, info),
     registration: contextSubject?.properties?.registration || '',
     aircraftType: contextSubject?.properties?.type || '',
+    source: contextSubject?.source || '',
+    context: {
+      ...(contextSubject?.properties || {}),
+      source: contextSubject?.source || '',
+      destination: contextSubject?.properties?.destination || '',
+    },
     position: Cesium.Cartesian3.clone(bb.position),
     origin,
   });
@@ -441,6 +447,8 @@ function _contextSubjectMetadata(icao24) {
         : '',
       heading: Number.isFinite(described.track) ? `${Math.round(described.track)}°` : '',
       route: route || '',
+      origin: described.route?.origin?.code || '',
+      destination: described.route?.destination?.code || '',
       icao24,
       // Honesty cue: the contact is coasting on dead reckoning, so the
       // narrated position/velocity are last-known rather than live.

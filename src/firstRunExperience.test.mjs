@@ -577,22 +577,22 @@ test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins
   );
 });
 
-// ── Voice: instruction-only, tool schema byte-unchanged ─────────────────────
+// ── Voice: retired visual controls stay absent ──────────────────────────────
 
-test('the voice tool schema pins the retired style and scene controls', () => {
+test('the voice tool schema pins the retired style, scene, and HUD controls', () => {
   const src = fs.readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
   const start = src.indexOf('const GEV_REALTIME_TOOLS = [');
   assert.ok(start > 0, 'GEV_REALTIME_TOOLS must still be a single literal array');
   const end = src.indexOf('\n];\n', start);
   const block = src.slice(start, end + 4);
 
-  // Re-pinned 2026-09-01 after retiring set_visual_style and control_scene,
-  // and narrowing set_post_processing to Sharpen only.
-  assert.equal(block.length, 29918, 'tool schema byte length drifted from the pinned release schema');
+  // Re-pinned 2026-09-02 after retiring set_hud, CCTV projection/calibration,
+  // and the removed CCTV panel target.
+  assert.equal(block.length, 29332, 'tool schema byte length drifted from the pinned release schema');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'a30a0eb04d6f6fccea43273cb601b96b51d16688c31855ccd789ee8d65818400',
-    'the retired visual/scene tools must not silently return',
+    'dc2dec3f1e6e45b93381e6a728300f52f57f3277e74af3bcd9177286a1d0f1fe',
+    'the retired visual/scene/HUD tools must not silently return',
   );
 
   // ...and the mapping that makes them reachable by voice is one instruction

@@ -375,11 +375,9 @@ test('newer visual, map, and individual panel actions suppress only their owned 
 test('every explicit visual UI gesture claims restore authority before it mutates state', () => {
   const initUi = sourceBlock('  _initUI() {', '  _initMapStackControl() {');
   const gestureRoutes = [
-    ["if (e.key.toLowerCase() === 'h')", "if (e.key.toLowerCase() === 'o')", 'this.hud.toggle()', 'HUD hotkey'],
     ["if (e.key.toLowerCase() === 'd')", "if (e.key.toLowerCase() === 'c')", 'cycleDetectionMode()', 'detection hotkey'],
     ['// Sharpen toggle', 'if (this._sharpenSlider)', 'this._setSharpenEnabled(', 'sharpen button'],
-    ["this._sharpenSlider.addEventListener('input'", 'if (this._hudLayoutSelect)', 'this._applySharpenIntensity(', 'sharpen slider'],
-    ["this._hudLayoutSelect.addEventListener('change'", 'if (this._cleanViewBtn)', 'this._setHudVariant(', 'HUD layout select'],
+    ["this._sharpenSlider.addEventListener('input'", 'if (this._cleanViewBtn)', 'this._applySharpenIntensity(', 'sharpen slider'],
     ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this._applyDetectionDensityFromUi()', 'detection density slider'],
     ["button.addEventListener('click'", 'for (const slider of [this._detectionFadeSlider', 'this._setDetectionAllocation(', 'detection allocation button'],
     ["slider?.addEventListener('input'", 'if (this._celestialBtn)', 'this._applyDetectionFadeFromUi()', 'detection fade controls'],
@@ -394,14 +392,6 @@ test('every explicit visual UI gesture claims restore authority before it mutate
   const hudToggle = sourceBlock('  _initHUDToggle() {', '  _initCockpitDisplayPortal() {');
   assertClaimsBefore(
     hudToggle.slice(
-      hudToggle.indexOf("this._hudBtn.addEventListener('click'"),
-      hudToggle.indexOf('if (this._hudLayoutSelect)'),
-    ),
-    'this.hud.toggle()',
-    'HUD button',
-  );
-  assertClaimsBefore(
-    hudToggle.slice(
       hudToggle.indexOf("this._detectionBtn.addEventListener('click'"),
       hudToggle.indexOf('this._cockpitDisplayToggleBtn'),
     ),
@@ -410,8 +400,8 @@ test('every explicit visual UI gesture claims restore authority before it mutate
   );
 });
 
-// Contacts OWNS detection while it is active (forced Dense @ 75%). That makes
-// an explicit Context transition a visual-lane gesture exactly like the HUD or
+// Contacts owns detection while it is active. That makes
+// an explicit Context transition a visual-lane gesture exactly like the
 // detection controls: without a claim, the share restore that lands 1.5 s into
 // startup re-applies the link's `dm`/`dd` straight over the forced preset and
 // Contacts silently loses its own overlay. The sweep above enumerates routes
@@ -499,8 +489,6 @@ test('Context lane claims never set the session detection-override flag', () => 
 
 test('every explicit visual control facade claims restore authority before mutation', () => {
   const facadeRoutes = [
-    ['  setHudVisible(mode) {', '  setHudLayout(variantName) {', 'this.hud.setMode(', 'setHudVisible'],
-    ['  setHudLayout(variantName) {', '  getDetectionState() {', 'this._setHudVariant(', 'setHudLayout'],
     ['  setDetection({ enabled, mode, densityPct, allocationStrategy, fadePct, outsideOpacityPct } = {}) {', '  async setMapStack(stackId) {', 'this._setDetectionAllocation(', 'setDetection'],
     ['  setSharpen({ enabled, intensityPct } = {}) {', '  get celestialRingEnabled() {', 'this._applySharpenIntensity(', 'setSharpen'],
     ['  setCelestialRingEnabled(enabled, { syncShare = true, focus = false } = {}) {', '  setOrbit(enabled) {', 'this.celestialRing?.setEnabled(', 'setCelestialRingEnabled'],

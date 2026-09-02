@@ -4,7 +4,6 @@ const MOBILE_PANEL_IDS = Object.freeze([
   'global-context-panel',
   'control-panel',
   'pp-toggles',
-  'cctv-panel',
 ]);
 
 /**

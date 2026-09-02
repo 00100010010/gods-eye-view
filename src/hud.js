@@ -33,7 +33,7 @@ const HUD_COLORS = {
 const MILITARY_STYLES = new Set(['retro', 'surveillance', 'thermal']);
 
 /** Allowed HUD layout variants. */
-const HUD_VARIANTS = new Set(['tactical', 'operator', 'minimal']);
+const HUD_VARIANTS = new Set(['tactical', 'minimal']);
 const HUD_SUMMARY_INTERVAL_MS = 15000;
 const HUD_SUMMARY_URL = '/api/openai/hud-summary';
 
@@ -66,8 +66,9 @@ export class IntelHUD {
    * @param {Cesium.Viewer} viewer - The Cesium Viewer instance used for
    *   camera telemetry and coordinate derivation.
    */
-  constructor(viewer) {
+  constructor(viewer, { enabled = true } = {}) {
     this.viewer = viewer;
+    this._enabled = enabled === true;
     this._visible = false;
     this._autoMode = true; // auto show/hide based on style
     this._currentStyle = 'normal';
@@ -130,9 +131,11 @@ export class IntelHUD {
     this._orbitNum = 47000 + Math.floor(Math.random() * 1000);
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
-    this._buildDOM();
-    this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
-    this._startTimers();
+    if (this._enabled) {
+      this._buildDOM();
+      this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
+      this._startTimers();
+    }
   }
 
   /**
@@ -728,6 +731,7 @@ export class IntelHUD {
    */
   onStyleChange(styleName) {
     this._currentStyle = styleName;
+    if (!this._enabled) return;
 
     // Update mode label
     const modeEl = document.getElementById('hud-mode');
@@ -755,6 +759,10 @@ export class IntelHUD {
 
   /** Make the HUD visible and immediately refresh all readouts. */
   show() {
+    if (!this._enabled) {
+      this._visible = false;
+      return;
+    }
     this._visible = true;
     if (this._el) this._el.classList.add('active');
     this._updateCameraData(); // immediate update
@@ -770,6 +778,7 @@ export class IntelHUD {
 
   /** Toggle HUD visibility and disable auto-mode (user override). */
   toggle() {
+    if (!this._enabled) return;
     if (this._visible) {
       this._autoMode = false; // user override
       this.hide();
@@ -785,6 +794,11 @@ export class IntelHUD {
    *   show/hide; `'on'`/`'off'` force visibility and disable auto-mode.
    */
   setMode(mode) {
+    if (!this._enabled) {
+      this._autoMode = false;
+      this._visible = false;
+      return;
+    }
     if (mode === 'auto') {
       this._autoMode = true;
       this.onStyleChange(this._currentStyle);
@@ -799,7 +813,7 @@ export class IntelHUD {
   /**
    * Switch the HUD layout variant. Falls back to `'tactical'` if the
    * name is unrecognized.
-   * @param {string} variantName - One of `'tactical'`, `'operator'`, `'minimal'`.
+   * @param {string} variantName - One of `'tactical'` or `'minimal'`.
    */
   setVariant(variantName) {
     const normalized = String(variantName || '').toLowerCase();
@@ -851,7 +865,7 @@ export class IntelHUD {
     clearInterval(this._timestampInterval);
     clearInterval(this._summaryInterval);
     clearInterval(this._summaryTypingInterval);
-    this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
+    if (this._enabled) this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
     this._summaryRequest?.abort();
   }

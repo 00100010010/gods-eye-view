@@ -330,10 +330,10 @@ export function contextRestoreLayerIds(snapshot = {}) {
 }
 
 /**
- * Cockpit entry belongs to the operational Contacts context bundle. A tracked
- * aircraft alone is not sufficient: both observed-flight feeds must still be
- * active so the cockpit's surrounding-contact picture is not presented as a
- * complete context view when one source is disabled.
+ * Cockpit entry follows the tracked aircraft, independently of the optional
+ * Contacts bundle. The tracked descriptor supplies the aircraft's own honest
+ * context; nearby-contact cohorts simply remain unavailable when Contacts is
+ * not active.
  *
  * @param {object} input Current context and dependency visibility.
  * @param {string|null} input.contextMode Active Context mode.
@@ -348,10 +348,8 @@ export function cockpitEntryAllowed({
   flightsEnabled,
   militaryEnabled,
 }) {
-  return contextMode === 'flights'
-    && !contextModeChanging
-    && Boolean(flightsEnabled)
-    && Boolean(militaryEnabled);
+  return !contextModeChanging
+    && Boolean(flightsEnabled || militaryEnabled);
 }
 
 /**

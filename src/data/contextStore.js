@@ -103,7 +103,21 @@ export function refreshTrackedSubjectContext(metadata) {
   const id = String(metadata.id);
   const existing = store.entities.get(id);
   if (!existing || existing.layerId !== metadata.layerId) return null;
-  return registerEntityContext(existing.entity, { ...metadata, id });
+  const record = registerEntityContext(existing.entity, { ...metadata, id });
+  if (record) {
+    window.dispatchEvent(new CustomEvent('gev:tracked-subject-context-updated', {
+      detail: {
+        ...record,
+        registration: record.properties?.registration || '',
+        aircraftType: record.properties?.type || '',
+        context: {
+          ...(record.properties || {}),
+          source: record.source || '',
+        },
+      },
+    }));
+  }
+  return record;
 }
 
 /**

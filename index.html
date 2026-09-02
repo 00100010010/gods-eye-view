@@ -62,8 +62,7 @@
     <button id="map-source-dismiss" type="button" aria-label="Dismiss map source message">&times;</button>
   </aside>
 
-  <aside id="aircraft-photo-card" aria-label="Selected aircraft photo" aria-live="polite" hidden>
-    <button id="aircraft-photo-close" type="button" aria-label="Close aircraft photo">&times;</button>
+  <aside id="aircraft-photo-card" aria-label="Tracked aircraft context" aria-live="polite" hidden>
     <div class="aircraft-photo-media">
       <a id="aircraft-photo-link" target="_blank" rel="noopener noreferrer" hidden>
         <img id="aircraft-photo-image" alt="" referrerpolicy="no-referrer" hidden />
@@ -73,6 +72,16 @@
     <div class="aircraft-photo-copy">
       <strong id="aircraft-photo-title">AIRCRAFT</strong>
       <span id="aircraft-photo-meta"></span>
+      <dl class="aircraft-contact-details">
+        <div><dt>ROUTE</dt><dd id="aircraft-contact-route">—</dd></div>
+        <div><dt>DESTINATION</dt><dd id="aircraft-contact-destination">—</dd></div>
+        <div><dt>OPERATOR</dt><dd id="aircraft-contact-operator">—</dd></div>
+        <div><dt>ALTITUDE</dt><dd id="aircraft-contact-altitude">—</dd></div>
+        <div><dt>SPEED</dt><dd id="aircraft-contact-speed">—</dd></div>
+        <div><dt>HEADING</dt><dd id="aircraft-contact-heading">—</dd></div>
+        <div><dt>SOURCE</dt><dd id="aircraft-contact-source">—</dd></div>
+        <div><dt>STATUS</dt><dd id="aircraft-contact-status">—</dd></div>
+      </dl>
       <a id="aircraft-photo-credit" target="_blank" rel="noopener noreferrer" hidden></a>
     </div>
   </aside>
@@ -109,8 +118,6 @@
         </svg>
         <small id="cockpit-route-direction-label">DEST ---°</small>
       </div>
-      <div class="cockpit-visor-status cockpit-visor-status-left">OPTICAL PLANE · 01</div>
-      <div class="cockpit-visor-status cockpit-visor-status-right">VISOR LOCK · ACTIVE</div>
     </div>
     <div id="cockpit-speed-rim" class="cockpit-altitude-rim cockpit-speed-rim">
       <span class="cockpit-altitude-rim-label">GROUND SPEED · KTS</span>
@@ -152,7 +159,6 @@
     </div>
     <div class="cockpit-topline">
       <div>
-        <span class="cockpit-kicker">FIRST PERSON</span>
         <strong id="cockpit-callsign">AIRCRAFT</strong>
         <span id="cockpit-aircraft-meta" class="cockpit-aircraft-meta">LIVE TRACK · COURSE ALIGNED</span>
       </div>
@@ -311,7 +317,6 @@
           <button id="cockpit-display-toggle-btn" class="cockpit-utility-glyph" type="button" aria-expanded="false" aria-controls="cockpit-display-panel" aria-label="Expand Cockpit display options" title="Expand Cockpit display options">◀</button>
         </div>
         <div id="cockpit-display-panel" class="cockpit-utility-popover" role="group" aria-label="Cockpit display options" hidden>
-          <div class="cockpit-display-slot" data-cockpit-display-slot="hud"></div>
           <div class="cockpit-display-slot" data-cockpit-display-slot="detection"></div>
           <div class="cockpit-display-slot" data-cockpit-display-slot="parameters"></div>
           <div class="cockpit-display-slot" data-cockpit-display-slot="models3d"></div>
@@ -339,10 +344,13 @@
         </div>
       </div>
     </aside>
-    <div class="cockpit-help">ESC EXIT <span>·</span> C TOGGLE</div>
   </section>
 
   <nav id="view-switcher" aria-label="View switcher">
+    <button id="cockpit-entry" type="button" hidden>
+      <span class="material-symbols-outlined" aria-hidden="true">flight</span>
+      <span>COCKPIT</span>
+    </button>
     <button id="cockpit-reset-globe" type="button" aria-label="Reset cockpit to full globe view" title="Exit cockpit and return to full globe view" hidden>
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
       <span>RESET</span>
@@ -361,28 +369,14 @@
       <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel">&#x25C0;</button>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD (H)">
-        <span class="pp-icon">&#x25CE;</span>
-        <span class="pp-label">HUD</span>
-      </button>
-      <div class="pp-slider-row" id="hud-layout-row">
-        <span class="pp-slider-mini-label">Layout</span>
-        <select id="hud-layout-select" class="pp-select" aria-label="HUD layout">
-          <option value="tactical">Tactical</option>
-          <option value="operator">Operator</option>
-          <option value="minimal">Minimal</option>
-        </select>
-      </div>
-    </div>
-    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="detection-toggle" title="Detection Overlay (D)" aria-label="Detection overlay" aria-pressed="false">
         <span class="pp-icon">&#x25A3;</span>
         <span class="pp-label">DETECT</span>
       </button>
       <div class="pp-slider-row detection-slider-row" id="detection-slider-row">
         <label class="pp-slider-mini-label" for="detection-density-slider">Density</label>
-        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" aria-label="Detection label density" />
-        <span class="pp-slider-value" id="detection-density-value">50%</span>
+        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="25" aria-label="Detection label density" />
+        <span class="pp-slider-value" id="detection-density-value">25%</span>
       </div>
       <div class="pp-slider-row detection-allocation-row" id="detection-allocation-row">
         <span class="pp-slider-mini-label">Allocation</span>
@@ -398,8 +392,8 @@
       </div>
       <div class="pp-slider-row detection-opacity-row" id="detection-opacity-row">
         <label class="pp-slider-mini-label" for="detection-opacity-slider">Outside</label>
-        <input type="range" class="pp-slider" id="detection-opacity-slider" min="0" max="100" step="1" value="1" aria-label="Detection opacity outside the keyhole" title="World-overlay label and card opacity beyond the fade distance" />
-        <span class="pp-slider-value" id="detection-opacity-value">1%</span>
+        <input type="range" class="pp-slider" id="detection-opacity-slider" min="0" max="100" step="1" value="7" aria-label="Detection opacity outside the keyhole" title="World-overlay label and card opacity beyond the fade distance" />
+        <span class="pp-slider-value" id="detection-opacity-value">7%</span>
       </div>
     </div>
     <!-- The one shared preset-parameter surface is inserted here at runtime. -->
@@ -533,7 +527,6 @@
     <div class="mobile-more-grid">
       <button type="button" data-mobile-panel="control-panel"><span class="material-symbols-outlined" aria-hidden="true">map</span>MAP SOURCES</button>
       <button type="button" data-mobile-panel="pp-toggles"><span class="material-symbols-outlined" aria-hidden="true">tune</span>DISPLAY</button>
-      <button type="button" data-mobile-panel="cctv-panel"><span class="material-symbols-outlined" aria-hidden="true">videocam</span>CCTV</button>
       <button type="button" data-mobile-action="reset"><span class="material-symbols-outlined" aria-hidden="true">public</span>RESET VIEW</button>
       <button type="button" data-mobile-action="logout"><span class="material-symbols-outlined" aria-hidden="true">logout</span>LOG OUT</button>
     </div>
@@ -552,64 +545,8 @@
       <div id="data-toggles" class="data-toggle-list"></div>
       <button id="clear-selected-layers" class="data-panel-clear" type="button" aria-label="Turn off all selected data layers">
         <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
-        <span>TURN OFF SELECTED LAYERS</span>
+        <span>TURN OFF ALL</span>
       </button>
-    </div>
-  </div>
-
-  <!-- CCTV Coverage Panel -->
-  <div id="cctv-panel" class="panel-collapsible collapsed" data-panel-id="cctv-panel">
-    <div class="panel-glow"></div>
-    <div class="cctv-panel-inner">
-      <div class="panel-header">
-        <span class="panel-title">CCTV</span>
-        <span class="panel-divider"></span>
-        <button class="panel-collapse-btn" data-collapse-target="cctv-panel" title="Collapse panel">+</button>
-      </div>
-      <div id="cctv-frame-wrap" class="cctv-frame-wrap">
-        <img id="cctv-frame" alt="CCTV feed frame" />
-      </div>
-      <div id="cctv-source-badge" role="status" aria-live="polite">SOURCE · UNKNOWN</div>
-      <div id="cctv-meta">Enable CCTV to load camera intersections</div>
-      <div class="cctv-controls">
-        <button id="cctv-enable-btn" class="panel-action-btn">CCTV OFF</button>
-        <button id="cctv-nearest-btn" class="panel-action-btn">NEAREST</button>
-      </div>
-      <div class="cctv-controls">
-        <button id="cctv-prev-btn" class="panel-action-btn">PREV</button>
-        <select id="cctv-camera-select" aria-label="CCTV camera"></select>
-        <button id="cctv-next-btn" class="panel-action-btn">NEXT</button>
-      </div>
-      <div class="cctv-controls">
-        <button id="cctv-focus-btn" class="panel-action-btn">FOCUS</button>
-        <button id="cctv-coverage-btn" class="panel-action-btn">COVERAGE OFF</button>
-        <button id="cctv-auto-hop-btn" class="panel-action-btn">AUTO HOP OFF</button>
-      </div>
-      <div class="cctv-controls">
-        <button id="cctv-projection-btn" class="panel-action-btn">PROJECTION ON</button>
-        <span id="cctv-quality-chip">CAL · --</span>
-      </div>
-      <div class="cctv-calibration-block">
-        <div class="cctv-calibration-header">
-          <div class="cctv-summary-label">CALIBRATION</div>
-          <button id="cctv-adjust-btn" class="panel-action-btn" title="Drag the camera in the world: rings rotate, arrows move, handles set range/FOV">ADJUST</button>
-        </div>
-        <div id="cctv-cal-readout" class="cctv-cal-readout" aria-label="Camera pose — click a value to type">
-          <button class="cctv-cal-value" data-cal-field="heading" title="Heading (compass °) — click to type">HDG --</button>
-          <button class="cctv-cal-value" data-cal-field="pitch" title="Pitch (° up/down) — click to type">PITCH --</button>
-          <button class="cctv-cal-value" data-cal-field="fov" title="Horizontal FOV (°) — click to type">FOV --</button>
-          <button class="cctv-cal-value" data-cal-field="range" title="Range / monitor-plane distance (m) — click to type">RANGE --</button>
-          <button class="cctv-cal-value" data-cal-field="height" title="Mount height above ground (m) — click to type">HGT --</button>
-          <button class="cctv-cal-value" data-cal-field="north" title="North offset from catalog position (m) — click to type">ΔN --</button>
-          <button class="cctv-cal-value" data-cal-field="east" title="East offset from catalog position (m) — click to type">ΔE --</button>
-        </div>
-        <div class="cctv-controls cctv-calibration-actions">
-          <button id="cctv-calib-save-btn" class="panel-action-btn">SAVE CAL</button>
-          <button id="cctv-calib-reset-btn" class="panel-action-btn">RESET CAL</button>
-        </div>
-      </div>
-      <div class="cctv-summary-label">SCENE SUMMARY</div>
-      <div id="cctv-summary">Enable CCTV to start camera-linked intelligence summaries.</div>
     </div>
   </div>
 
@@ -671,10 +608,6 @@
         </div>
         <section id="context-flights-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-flights-btn" hidden>
           <div class="global-context-actions" aria-label="Contact Context actions">
-            <button id="cockpit-entry" type="button" hidden>
-              <span class="material-symbols-outlined" aria-hidden="true">flight</span>
-              <span>COCKPIT</span>
-            </button>
             <button id="installations-search-btn" class="panel-layer-toggle" type="button">SEARCH NEARBY SITES</button>
             <button id="tr3b-toggle" class="tr3b-toggle" type="button" aria-pressed="false" hidden aria-label="Reclassify tracked contact as TR-3B" title="Reclassify as TR-3B">🛸</button>
           </div>
@@ -832,9 +765,6 @@
     </div>
     <p class="key-setup-note" data-key-setup-status role="status" aria-live="polite">The Google Maps key buys the photorealistic planet — everything else stacks on top.</p>
   </aside>
-
-  <!-- Intelligence HUD Overlay -->
-  <div id="intel-hud"></div>
 
   <!-- Loading screen -->
   <div id="loading-screen">

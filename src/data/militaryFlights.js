@@ -326,6 +326,12 @@ function _publishTrackedSelection(icao24, origin = 'programmatic') {
     label: _toCleanText(info.callsign) || _toCleanText(info.registration) || icao24,
     registration: contextSubject?.properties?.registration || '',
     aircraftType: contextSubject?.properties?.type || '',
+    source: contextSubject?.source || '',
+    context: {
+      ...(contextSubject?.properties || {}),
+      source: contextSubject?.source || '',
+      destination: contextSubject?.properties?.destination || '',
+    },
     position: Cesium.Cartesian3.clone(bb.position),
     origin,
   });

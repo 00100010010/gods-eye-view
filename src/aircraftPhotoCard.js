@@ -8,6 +8,39 @@ function joinAircraftMetadata(selection) {
   ].filter(Boolean).join(' · ');
 }
 
+function normalizeAircraftContextSelection(detail) {
+  if (!detail || !['flights', 'military'].includes(detail.layerId)) return null;
+  const aircraftId = String(detail.id ?? '').trim().toLowerCase();
+  if (!aircraftId) return null;
+  return {
+    aircraftId,
+    icao24: aircraftId,
+    label: String(detail.label ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
+      || aircraftId.toUpperCase(),
+    registration: String(detail.registration ?? '').replace(/\s+/g, ' ').trim().slice(0, 32),
+    aircraftType: String(detail.aircraftType ?? '').replace(/\s+/g, ' ').trim().slice(0, 100),
+  };
+}
+
+function cleanContextValue(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text || '—';
+}
+
+function contactContext(detail) {
+  const context = detail?.context || detail?.properties || {};
+  return {
+    route: cleanContextValue(context.route),
+    destination: cleanContextValue(context.destination),
+    operator: cleanContextValue(context.operator),
+    altitude: cleanContextValue(context.altitude),
+    speed: cleanContextValue(context.speed),
+    heading: cleanContextValue(context.heading),
+    source: cleanContextValue(context.source || detail?.source),
+    status: cleanContextValue(context.status),
+  };
+}
+
 /**
  * Show a source-attributed photograph for the currently selected aircraft.
  * Requests are generation-guarded as well as aborted so a slow old lookup can
@@ -21,12 +54,21 @@ export function initAircraftPhotoCard({ fetchImpl = fetch } = {}) {
   const title = document.getElementById('aircraft-photo-title');
   const metadata = document.getElementById('aircraft-photo-meta');
   const credit = document.getElementById('aircraft-photo-credit');
-  const close = document.getElementById('aircraft-photo-close');
-  if (!card || !image || !imageLink || !status || !title || !metadata || !credit || !close) return null;
+  const contextFields = Object.fromEntries([
+    'route',
+    'destination',
+    'operator',
+    'altitude',
+    'speed',
+    'heading',
+    'source',
+    'status',
+  ].map((key) => [key, document.getElementById(`aircraft-contact-${key}`)]));
+  if (!card || !image || !imageLink || !status || !title || !metadata || !credit) return null;
 
   let generation = 0;
   let controller = null;
-  let activeIcao = null;
+  let activeAircraftId = null;
 
   const resetMedia = (message) => {
     image.hidden = true;
@@ -45,13 +87,20 @@ export function initAircraftPhotoCard({ fetchImpl = fetch } = {}) {
     generation += 1;
     controller?.abort();
     controller = null;
-    activeIcao = null;
+    activeAircraftId = null;
     card.hidden = true;
     resetMedia('LOOKING UP AIRCRAFT PHOTO…');
   };
 
+  const renderContext = (detail) => {
+    const values = contactContext(detail);
+    for (const [key, field] of Object.entries(contextFields)) {
+      if (field) field.textContent = values[key];
+    }
+  };
+
   const showSelection = async (detail) => {
-    const selection = normalizeAircraftPhotoSelection(detail);
+    const selection = normalizeAircraftContextSelection(detail);
     if (!selection) {
       hide();
       return;
@@ -61,20 +110,28 @@ export function initAircraftPhotoCard({ fetchImpl = fetch } = {}) {
     const requestGeneration = generation;
     controller?.abort();
     controller = new AbortController();
-    activeIcao = selection.icao24;
+    activeAircraftId = selection.aircraftId;
     title.textContent = selection.label;
     metadata.textContent = joinAircraftMetadata(selection);
-    resetMedia('LOOKING UP AIRCRAFT PHOTO…');
+    renderContext(detail);
     card.hidden = false;
 
+    const photoSelection = normalizeAircraftPhotoSelection(detail);
+    if (!photoSelection) {
+      resetMedia('AIRCRAFT PHOTO UNAVAILABLE');
+      controller = null;
+      return;
+    }
+    resetMedia('LOOKING UP AIRCRAFT PHOTO…');
+
     try {
-      const response = await fetchImpl(`/api/aircraft-photo/${selection.icao24}`, {
+      const response = await fetchImpl(`/api/aircraft-photo/${photoSelection.icao24}`, {
         headers: { Accept: 'application/json' },
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`Aircraft photo request failed (${response.status})`);
       const payload = await response.json();
-      if (requestGeneration !== generation || activeIcao !== selection.icao24) return;
+      if (requestGeneration !== generation || activeAircraftId !== selection.aircraftId) return;
       if (!payload?.found || !payload.photo?.imageUrl || !payload.photo?.sourceUrl) {
         resetMedia('NO MATCHING AIRCRAFT PHOTO');
         return;
@@ -97,31 +154,34 @@ export function initAircraftPhotoCard({ fetchImpl = fetch } = {}) {
   };
 
   const onSelected = (event) => { void showSelection(event.detail); };
-  const onCleared = (event) => {
-    if (!activeIcao || !event.detail?.id || event.detail.id === activeIcao) hide();
+  const onContextUpdated = (event) => {
+    const selection = normalizeAircraftContextSelection(event.detail);
+    if (!activeAircraftId || selection?.aircraftId !== activeAircraftId) return;
+    renderContext(event.detail);
+    title.textContent = selection.label;
+    metadata.textContent = joinAircraftMetadata(selection);
   };
-  const onOtherEntitySelected = () => hide();
+  const onCleared = (event) => {
+    const clearedId = String(event.detail?.id ?? '').trim().toLowerCase();
+    if (!activeAircraftId || !clearedId || clearedId === activeAircraftId) hide();
+  };
   const onImageError = () => {
     if (!card.hidden) resetMedia('AIRCRAFT PHOTO UNAVAILABLE');
   };
 
-  close.addEventListener('click', hide);
   image.addEventListener('error', onImageError);
   window.addEventListener('gev:awareness-subject-selected', onSelected);
+  window.addEventListener('gev:tracked-subject-context-updated', onContextUpdated);
   window.addEventListener('gev:awareness-subject-cleared', onCleared);
-  window.addEventListener('gev:entity-selected', onOtherEntitySelected);
-  window.addEventListener('gev:entity-selection-cleared', onOtherEntitySelected);
 
   return {
     hide,
     destroy() {
       hide();
-      close.removeEventListener('click', hide);
       image.removeEventListener('error', onImageError);
       window.removeEventListener('gev:awareness-subject-selected', onSelected);
+      window.removeEventListener('gev:tracked-subject-context-updated', onContextUpdated);
       window.removeEventListener('gev:awareness-subject-cleared', onCleared);
-      window.removeEventListener('gev:entity-selected', onOtherEntitySelected);
-      window.removeEventListener('gev:entity-selection-cleared', onOtherEntitySelected);
     },
   };
 }

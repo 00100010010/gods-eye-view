@@ -77,24 +77,23 @@ test('first run opens at 7% detection fade, at every surface that decides it', (
     'sharelink.js: the generator starts from the same value the overlay draws');
 });
 
-// 2b. Detection OUTSIDE opacity — 1% on a first run
+// 2b. Detection OUTSIDE opacity — 7% on a first run
 // ---------------------------------------------------------------------------
 
-test('first run opens at 1% OUTSIDE opacity, at every surface that decides it', () => {
-  assert.equal(KEYHOLE_OUTSIDE_OPACITY_DEFAULT, 0.01,
-    'owner final lock 2026-08-24: the world overlay reads quieter beyond the keyhole');
+test('first run opens at 7% OUTSIDE opacity, at every surface that decides it', () => {
+  assert.equal(KEYHOLE_OUTSIDE_OPACITY_DEFAULT, 0.07);
 
   // Four independent literals decide this on a fresh boot: the engine constant
   // above, the markup and its readout, ui.js's global post defaults, and the
   // share generator's starting state. Changing one alone ships a UI that
   // disagrees with its own engine.
-  assert.match(indexHtml, /id="detection-opacity-slider"[^>]*\svalue="1"/,
-    'index.html: the OUTSIDE slider ships at 1');
-  assert.match(indexHtml, /id="detection-opacity-value"[^>]*>1%</,
+  assert.match(indexHtml, /id="detection-opacity-slider"[^>]*\svalue="7"/,
+    'index.html: the OUTSIDE slider ships at 7');
+  assert.match(indexHtml, /id="detection-opacity-value"[^>]*>7%</,
     'index.html: and its readout agrees with the handle');
-  assert.match(uiSource, /detectionOutsideOpacityPct: 1,/,
+  assert.match(uiSource, /detectionOutsideOpacityPct: 7,/,
     'ui.js: the global post defaults apply the same value on first load');
-  assert.match(shareSource, /this\._detectionOutsideOpacityPct = 1;/,
+  assert.match(shareSource, /this\._detectionOutsideOpacityPct = 7;/,
     'sharelink.js: the generator starts from the same value the overlay draws');
 
   // The bracket floor is calibrated AT the default, so it moves with it — the
@@ -124,12 +123,12 @@ test('an explicit OUTSIDE opacity still wins over the new default', () => {
 // 3. Detection — on for every style on a first run, Normal included
 // ---------------------------------------------------------------------------
 
-test('first run opens with detection on, in every style, using the one tactical preset', () => {
+test('first run opens with sparse detection in every style using one preset', () => {
   // Normal used to start OFF while only CRT/NVG/FLIR auto-applied the preset.
   // It is now the baseline for all of them, reusing the SAME frozen object, so
   // "the tactical look" cannot fork into two definitions.
-  assert.match(uiSource, /const MILITARY_DETECTION_PRESET = Object\.freeze\(\{ mode: 'dense', densityPct: 75 \}\);/,
-    'the tactical look is still Dense @ 75%');
+  assert.match(uiSource, /const MILITARY_DETECTION_PRESET = Object\.freeze\(\{ mode: 'sparse', densityPct: 25 \}\);/,
+    'the quiet look is Sparse @ 25%');
   const baseline = uiBlock('const GLOBAL_POST_DEFAULTS = {', '\n};');
   assert.match(baseline, /detectionMode: MILITARY_DETECTION_PRESET\.mode\.toUpperCase\(\),/,
     'the first-load baseline reads the preset rather than restating it');

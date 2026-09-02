@@ -10,14 +10,14 @@ export const ALLOCATION_ELASTIC = 'ELASTIC';
 export const ALLOCATION_WEIGHTED = 'WEIGHTED';
 export const ALLOCATION_STRATEGIES = Object.freeze([ALLOCATION_ELASTIC, ALLOCATION_WEIGHTED]);
 
-// The keyhole's default 1% outside opacity is appropriate for text, but it
+// The keyhole's default outside opacity is appropriate for text, but it
 // made side aircraft brackets effectively disappear while the same contacts
 // remained eligible. AIR geometry therefore gets a readable floor, without
 // changing label budgets.
 //
 // The floor is 0.35 AT THE DEFAULT OUTSIDE OPACITY, and it SCALES with the
 // OUTSIDE slider rather than overriding it. A flat 0.35 made that slider a
-// no-op for aircraft: dialling it down to 1% still painted brackets at 35%, so
+// no-op for aircraft: dialling it down still painted brackets at 35%, so
 // the control did nothing across a third of its travel while visibly working
 // for labels. A setting that moves everything except the thing the operator is
 // looking at is a broken control, not a safety net.
@@ -30,7 +30,7 @@ export const AIRCRAFT_BRACKET_ALPHA_FLOOR = 0.35;
  * stays a pure policy module with no Cesium dependency; detectionPolicy.test.mjs
  * imports the real constant and pins the two together so they cannot drift.
  *
- * It MOVES WITH THE DEFAULT (0.05 → 0.03 → 0.01; owner final lock 2026-08-24).
+ * It moves with the first-run default.
  * That pin is the tripwire
  * for exactly this change, and the decision it forces is which of two things the
  * approval attaches to: the bracket BRIGHTNESS, or the slider POSITION. It is
@@ -40,7 +40,7 @@ export const AIRCRAFT_BRACKET_ALPHA_FLOOR = 0.35;
  * 0.07 on a first run at the 1% default, which is the dead-zone complaint in
  * reverse.
  */
-export const AIRCRAFT_BRACKET_FLOOR_ANCHOR = 0.01;
+export const AIRCRAFT_BRACKET_FLOOR_ANCHOR = 0.07;
 
 /**
  * The AIR bracket alpha floor for a given OUTSIDE opacity setting.
@@ -49,9 +49,9 @@ export const AIRCRAFT_BRACKET_FLOOR_ANCHOR = 0.01;
  * across its whole travel while the shipped look does not move:
  *
  *   slider 0    → 0     off means off; the operator's zero stays authoritative
- *   slider 0.01 → 0.35  EXACTLY the shipped constant at the default, so the
+ *   slider 0.07 → 0.35  EXACTLY the shipped constant at the default, so the
  *                       approved look is reproduced unchanged (above the
- *                       anchor the floor rises smoothly — 0.05 ≈ 0.376)
+ *                       anchor the floor rises smoothly)
  *   slider 1.0  → 1.0   the boost decays to nothing: at full opacity the floor
  *                       equals the label alpha and stops overriding at all
  *

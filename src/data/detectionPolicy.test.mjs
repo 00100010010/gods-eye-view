@@ -106,7 +106,7 @@ test('the range around the default is REACHABLE from the handle', () => {
     AIRCRAFT_BRACKET_ALPHA_FLOOR,
     'the first-run setting still paints the approved bracket floor',
   );
-  assert.equal(AIRCRAFT_BRACKET_FLOOR_ANCHOR, 0.01, 'and that setting is 1% (owner, 2026-08-24)');
+  assert.equal(AIRCRAFT_BRACKET_FLOOR_ANCHOR, 0.07, 'and that setting is the shipped 7% default');
 });
 
 test('the bracket floor is strictly increasing and stops overriding at full opacity', () => {

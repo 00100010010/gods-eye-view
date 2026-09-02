@@ -17,7 +17,7 @@ export const KEYHOLE_LABEL_FEATHER_MAX_RATIO = 0.4;
 /**
  * First-run OUTSIDE opacity for keyhole-aligned world overlays.
  *
- * 0.01 since 2026-08-24 (owner final lock; 0.03 on 08-23, 0.05 before). Keep in lockstep with
+ * Keep this in lockstep with
  * `#detection-opacity-slider`'s markup value AND readout in index.html,
  * `_detectionOutsideOpacityPct` in sharelink.js,
  * `GLOBAL_POST_DEFAULTS.detectionOutsideOpacityPct` in ui.js, and
@@ -26,7 +26,7 @@ export const KEYHOLE_LABEL_FEATHER_MAX_RATIO = 0.4;
  * fallback, which stays at 5 on purpose: a link predating that field was
  * authored when 5 was what its author saw. Pinned in reasonableDefaults.test.mjs.
  */
-export const KEYHOLE_OUTSIDE_OPACITY_DEFAULT = 0.01;
+export const KEYHOLE_OUTSIDE_OPACITY_DEFAULT = 0.07;
 
 const RING_INSET_PX = 11;
 const MARKER_INSET_PX = 36;

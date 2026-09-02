@@ -49,6 +49,7 @@ import * as Cesium from 'cesium';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import {
   CCTV_ACTIVATION_RESULT,
+  CCTV_FOCUS_REQUEST_EVENT,
   activateCctvCameraFromWorldClick,
 } from '../cctvFocusRequest.js';
 import { bindTrackingClickGesture, isTrackingClickGesture } from './trackingClickGesture.js';
@@ -107,6 +108,9 @@ const FRAME_ENDPOINT = '/api/cctv/frame';
 const SOURCE_ENDPOINT = '/api/cctv/sources';
 const HEALTH_ENDPOINT = '/api/cctv/health';
 const MEDIA_ENDPOINT = '/api/cctv/media';
+// Product rule: CCTV is represented by its map marker only. Live imagery and
+// thumbnail cards stay out of the world; coverage remains an explicit option.
+const CCTV_MAP_VIDEO_ENABLED = false;
 
 // ---------------------------------------------------------------------------
 // Timing and geometry constants
@@ -281,8 +285,8 @@ let _coverageEntities = [];
 let _projectionEntities = [];
 let _enabled = false;
 let _activeCameraId = null;
-let _coverageMode = 'on'; // 'off' | 'on' (wireframes) | 'viewshed' (color-coded volumes)
-let _showProjection = true;
+let _coverageMode = 'off'; // 'off' | 'on' (wireframes) | 'viewshed' (color-coded volumes)
+let _showProjection = false;
 let _autoHop = false;
 // An explicit empty-space deselect keeps AUTO HOP configured but prevents its
 // timer from silently choosing a replacement. A later explicit activation or
@@ -299,6 +303,7 @@ let _lastError = null;
 let _healthById = new Map();
 let _calibrationById = new Map();
 let _listeners = new Set();
+let _rowControlsListener = null;
 let _projectionRaf = 0;
 let _removeFocusAppearListener = null;
 let _lastFocusStyleAt = 0;
@@ -456,19 +461,17 @@ export function createCctvProjectionOverlayEntry({ cameraId, name, position }) {
 }
 
 /**
- * Configures optional CCTV card presentation without changing card density.
- * The active-camera thumbnail defaults OFF, preserving the shipped behavior
- * where the monitor plane is the camera's sole active representation.
+ * Compatibility facade for the retired CCTV map-video presentation.
  *
  * @param {Object} [options]
  * @param {boolean} [options.activeCameraCardEnabled=false]
  * @returns {{activeCameraCardEnabled:boolean}}
  */
-export function setCctvCardPresentationOptions({ activeCameraCardEnabled = false } = {}) {
-  _activeCameraCardEnabled = activeCameraCardEnabled === true;
+export function setCctvCardPresentationOptions(_options = {}) {
+  _activeCameraCardEnabled = false;
   if (_enabled) pushAmbientCardEntries();
   _viewer?.scene?.requestRender?.();
-  return { activeCameraCardEnabled: _activeCameraCardEnabled };
+  return { activeCameraCardEnabled: false };
 }
 // True between camera.moveStart and moveEnd — hover picking pauses while the
 // camera is in motion (picks during a flight would fight the reselection).
@@ -2758,6 +2761,12 @@ function ensureCardFrameSlot(cameraId) {
  * annotate markers, they don't replace them).
  */
 function refreshAmbientCards() {
+  if (!CCTV_MAP_VIDEO_ENABLED) {
+    _cardIds = new Set();
+    _cctvOverlayHost.setEntries(CCTV_OVERLAY_SOURCE_ID, [], CCTV_OVERLAY_SOURCE_OPTIONS);
+    _cctvOverlayHost.setVisible(CCTV_OVERLAY_SOURCE_ID, false);
+    return;
+  }
   if (!_enabled || !_viewer || _viewer.isDestroyed() || !_records.length) {
     _cctvOverlayHost.setEntries(CCTV_OVERLAY_SOURCE_ID, [], CCTV_OVERLAY_SOURCE_OPTIONS);
     return;
@@ -2880,6 +2889,11 @@ function refreshAmbientCards() {
  * that keeps the pin while the gesture lasts.
  */
 function pushAmbientCardEntries() {
+  if (!CCTV_MAP_VIDEO_ENABLED) {
+    _cctvOverlayHost.setEntries(CCTV_OVERLAY_SOURCE_ID, [], CCTV_OVERLAY_SOURCE_OPTIONS);
+    _cctvOverlayHost.setVisible(CCTV_OVERLAY_SOURCE_ID, false);
+    return;
+  }
   const entries = [];
   let rank = 0;
   const push = (id, { pinned = false, active = false } = {}) => {
@@ -2921,6 +2935,7 @@ function pushAmbientCardEntries() {
  * @param {Cesium.Cartesian2} position - Pointer position (CSS px).
  */
 function handleHoverMove(position) {
+  if (!CCTV_MAP_VIDEO_ENABLED) return;
   if (!_enabled || _cameraMoving || _calibrationMode || !position) return;
   if (!_viewer || _viewer.isDestroyed()) return;
   const now = Date.now();
@@ -3494,6 +3509,11 @@ function notifyListeners() {
       console.warn('[Data:CCTV] listener error:', error);
     }
   }
+  try {
+    _rowControlsListener?.();
+  } catch (error) {
+    console.warn('[Data:CCTV] row-controls listener error:', error);
+  }
 }
 
 /**
@@ -3674,8 +3694,7 @@ export function bindCctvWorldClickGesture(handler, onClick, options = {}) {
 }
 
 /**
- * Sets the active camera by ID, initializes its projection runtime, refreshes
- * its frame, and updates styles.
+ * Sets the active camera by ID and updates its marker and optional coverage.
  * @param {string} cameraId - ID of the camera to activate.
  * @returns {'activated'|'unchanged'|'not-found'} Discriminated activation result.
  */
@@ -3694,17 +3713,14 @@ export function setActiveCamera(cameraId) {
   }
   _activeCameraId = cameraId;
   _autoHopSuspended = false;
-  // A real activation creates projection work — wake the self-stopping loop.
+  // Wake the self-stopping focus/projection loop only when it has work.
   startProjectionLoop();
   if (previousActiveRecord && previousActiveRecord !== record) {
     clearProbeClampOnDeactivation(previousActiveRecord, (previous) => {
       applyFrustumGeometry(previous, groundAltFor(previous));
     });
   }
-  // The clicked camera leaves the ambient quota immediately (never graced).
-  // Shipped behavior publishes no card for it because the monitor plane is
-  // now the active representation; the opt-in protected-card path republishes
-  // it synchronously through refreshAmbientCards() below.
+  // Retire any stale pre-icon-only card bookkeeping immediately.
   _cardIds.delete(cameraId);
   _cardGraceState.delete(cameraId);
   // Activating the hovered camera consumes the transient pin; the active
@@ -3717,20 +3733,20 @@ export function setActiveCamera(cameraId) {
     _geoQueue.splice(queueIdx, 1);
     _geoQueue.unshift(record);
   }
+  const hasWorldGeometry = _coverageMode !== 'off' || _showProjection;
   // §9.1: one obstruction probe per activation, BEFORE the geometry pass so
   // the range clamp lands in the same rewrite. A FIRST-EVER activation (no
   // real ground sample yet) probes from the catalog-prior altitude — if that
   // prior is off, the clamp is measured from a shifted origin, but a
   // re-activation after the one-shot snap lands re-probes from real ground,
   // so it self-corrects.
-  runActivationObstructionProbe(record);
-  // Coverage is activation-lazy even while the mode is OFF: the active
-  // camera's projection representation must be ready without materializing
-  // any idle neighbor. The following geometry rewrite welds these entities to
-  // the current sampled positions.
-  ensureActiveCoverageEntities(record);
-  ensureProjectionRuntime(record);
-  refreshProjectionImage(record, true);
+  if (hasWorldGeometry) runActivationObstructionProbe(record);
+  // Coverage and the retired projection compatibility path stay lazy.
+  if (_coverageMode !== 'off') ensureActiveCoverageEntities(record);
+  if (_showProjection) {
+    ensureProjectionRuntime(record);
+    refreshProjectionImage(record, true);
+  }
   // FIX B9b: an explicit user (re)select re-arms one real ground sample for the
   // newly-active camera, then freezes. Idle neighbors keep their resolved state.
   // FIX B9c: if tiles are ready this real pass applies + re-resolves
@@ -3742,8 +3758,7 @@ export function setActiveCamera(cameraId) {
   updateRecordGeometry(record);
   record.activationDone = true;
   refreshCoverageStyles();
-  // The newly active camera leaves the ambient ring (its monitor plane takes
-  // over); the freed slot re-fills on this same pass.
+  // Keep the retired ambient-card host empty.
   refreshAmbientCards();
   // ADJUST mode follows the active camera.
   _gizmo?.refresh();
@@ -4418,7 +4433,7 @@ const cctvLayer = {
       _autoHopSuspended = false;
     }
     const activeRecord = getActiveRecord();
-    if (activeRecord) {
+    if (activeRecord && _showProjection) {
       ensureProjectionRuntime(activeRecord);
       refreshProjectionImage(activeRecord, true);
     }
@@ -4432,8 +4447,8 @@ const cctvLayer = {
     _removeFocusAppearListener = onFocusTargetAppear(() => startProjectionLoop());
     // Ambient card tier: shared host source + policy-gated frame pacer + the
     // initial selection pass (moveEnd drives every later reselection).
-    _cctvOverlayHost.setVisible(CCTV_OVERLAY_SOURCE_ID, true);
-    startCardFrameLoop();
+    _cctvOverlayHost.setVisible(CCTV_OVERLAY_SOURCE_ID, CCTV_MAP_VIDEO_ENABLED);
+    if (CCTV_MAP_VIDEO_ENABLED) startCardFrameLoop();
     refreshAmbientCards();
     notifyListeners();
     restoreSpriteOrder(_viewer);
@@ -4539,6 +4554,7 @@ const cctvLayer = {
     // Clear existing subscribers rather than replacing the Set —
     // replacing would silently orphan any unsubscribe() closures
     _listeners.clear();
+    _rowControlsListener = null;
   },
 
   /**
@@ -4566,12 +4582,9 @@ const cctvLayer = {
       _coverageMode = normalizeCoverageMode(params.coverageMode, _coverageMode);
     }
     if (typeof params.showProjection === 'boolean') {
-      _showProjection = params.showProjection;
-      if (_showProjection) {
-        const active = getActiveRecord();
-        if (active) ensureProjectionRuntime(active);
-        startProjectionLoop();
-      }
+      // Old shares may still carry this key. Projection is retired and cannot
+      // be re-enabled through persisted or scripted state.
+      _showProjection = false;
     }
     if (typeof params.autoHop === 'boolean') {
       _autoHop = params.autoHop;
@@ -4582,6 +4595,18 @@ const cctvLayer = {
     }
     if (typeof params.selectedCameraId === 'string' && _recordById.has(params.selectedCameraId)) {
       setActiveCamera(params.selectedCameraId);
+    }
+    if (params.selectNearest) {
+      const nearest = nearestCameraIdToViewer();
+      if (nearest) setActiveCamera(nearest);
+    }
+    if (Number.isFinite(Number(params.cycleCamera)) && _records.length) {
+      const nextIdx = cctvCycleIndex(
+        _records.findIndex((record) => record.camera.id === _activeCameraId),
+        Number(params.cycleCamera) < 0 ? -1 : 1,
+        _records.length,
+      );
+      setActiveCamera(_records[nextIdx].camera.id);
     }
     if (params.calibration && typeof params.calibration === 'object') {
       const calibrationCfg = params.calibration;
@@ -4646,6 +4671,11 @@ const cctvLayer = {
     if (params.focusSelected && _activeCameraId) {
       focusCamera(_activeCameraId, Number(params.focusDurationSec) || 1.8);
     }
+    if (params.requestFocus && _activeCameraId && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(CCTV_FOCUS_REQUEST_EVENT, {
+        detail: { cameraId: _activeCameraId },
+      }));
+    }
     refreshCoverageStyles();
     notifyListeners();
   },
@@ -4672,6 +4702,72 @@ const cctvLayer = {
     };
   },
 
+  /** Compact controls rendered directly below the CCTV layer row. */
+  getRowControls() {
+    const active = getActiveRecord();
+    const hasCameras = _records.length > 0;
+    const coverageLabel = _coverageMode === 'viewshed'
+      ? 'VIEWSHED'
+      : (_coverageMode === 'on' ? 'COVERAGE' : 'COVERAGE OFF');
+    const nextCoverage = _coverageMode === 'off'
+      ? 'on'
+      : (_coverageMode === 'on' ? 'viewshed' : 'off');
+    const cameraLabel = active?.camera
+      ? `${active.camera.city} · ${active.camera.name}`
+      : 'No camera selected';
+    return {
+      chips: [
+        {
+          id: 'nearest',
+          label: 'NEAREST',
+          title: 'Select and focus the nearest available camera',
+          disabled: !hasCameras,
+          params: { selectNearest: true, requestFocus: true },
+        },
+        {
+          id: 'previous',
+          label: 'PREV',
+          title: 'Previous camera',
+          disabled: !hasCameras,
+          params: { cycleCamera: -1, requestFocus: true },
+        },
+        {
+          id: 'next',
+          label: 'NEXT',
+          title: 'Next camera',
+          disabled: !hasCameras,
+          params: { cycleCamera: 1, requestFocus: true },
+        },
+        {
+          id: 'focus',
+          label: 'FOCUS',
+          title: cameraLabel,
+          disabled: !active,
+          params: { requestFocus: true },
+        },
+        {
+          id: 'coverage',
+          label: coverageLabel,
+          title: 'Cycle coverage off, wireframe coverage, and viewshed',
+          active: _coverageMode !== 'off',
+          params: { coverageMode: nextCoverage },
+        },
+        {
+          id: 'auto-hop',
+          label: _autoHop ? 'AUTO HOP ON' : 'AUTO HOP OFF',
+          title: 'Automatically cycle cameras',
+          active: _autoHop,
+          params: { autoHop: !_autoHop },
+        },
+      ],
+      legend: [],
+    };
+  },
+
+  setRowControlsListener(listener) {
+    _rowControlsListener = typeof listener === 'function' ? listener : null;
+  },
+
   /**
    * Returns a sampled list of camera positions for the detection overlay system.
    * @param {Object} [options={}]
@@ -4680,26 +4776,9 @@ const cctvLayer = {
    * @returns {{ position: Cesium.Cartesian3, id: string, type: string }[]}
    */
   getDetectableObjects(options = {}) {
-    if (!_enabled || _records.length === 0) return [];
-    const maxCount = Number.isFinite(options.maxCount)
-      ? Math.max(1, Math.floor(options.maxCount))
-      : _records.length;
-    const seed = Number.isFinite(options.seed) ? Math.floor(options.seed) : 0;
-    const stride = Math.max(1, Math.ceil(_records.length / maxCount));
-    const start = seed % stride;
-
-    const objects = [];
-    for (let i = start; i < _records.length; i += stride) {
-      const camera = _records[i].camera;
-      objects.push({
-        position: _records[i].position,
-        sourceId: camera.id,
-        id: `CAM-${camera.id}`,
-        type: 'CAM',
-      });
-      if (objects.length >= maxCount) break;
-    }
-    return objects;
+    // CCTV markers are intentionally icon-only. Detection labels would create
+    // a second, less trustworthy presentation over the same camera position.
+    return [];
   },
 
   /**
@@ -4742,9 +4821,7 @@ const cctvLayer = {
   },
 
   /**
-   * Opts the active camera into or out of protected thumbnail publication.
-   * The default is false: the monitor plane remains the sole active-camera
-   * representation while ambient and hover-pinned cards continue unchanged.
+   * Compatibility facade for retired map thumbnails. Requests remain off.
    * @param {Object} [options]
    * @param {boolean} [options.activeCameraCardEnabled=false]
    * @returns {{activeCameraCardEnabled:boolean}}

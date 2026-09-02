@@ -400,7 +400,7 @@ test('explicit layer intent finishing during restore overrides the stale queued 
   }
 });
 
-test('cockpit entry requires Contacts context with both aircraft feeds enabled', () => {
+test('cockpit entry follows any settled tracked-aircraft feed without requiring Contacts', () => {
   assert.equal(cockpitEntryAllowed({
     contextMode: 'flights',
     contextModeChanging: false,
@@ -418,19 +418,25 @@ test('cockpit entry requires Contacts context with both aircraft feeds enabled',
     contextModeChanging: false,
     flightsEnabled: true,
     militaryEnabled: true,
-  }), false, 'ordinary layer selection is not an operational Contacts context');
+  }), true, 'tracking alone is enough; nearby Contacts context is optional');
   assert.equal(cockpitEntryAllowed({
     contextMode: 'flights',
     contextModeChanging: false,
     flightsEnabled: true,
     militaryEnabled: false,
-  }), false, 'the military contact feed is required');
+  }), true, 'a civilian tracked aircraft does not require the military feed');
   assert.equal(cockpitEntryAllowed({
     contextMode: 'flights',
     contextModeChanging: false,
     flightsEnabled: false,
     militaryEnabled: true,
-  }), false, 'the civilian contact feed is required');
+  }), true, 'a military tracked aircraft does not require the civilian feed');
+  assert.equal(cockpitEntryAllowed({
+    contextMode: null,
+    contextModeChanging: false,
+    flightsEnabled: false,
+    militaryEnabled: false,
+  }), false, 'at least one aircraft feed must be active');
 });
 
 test('context teardown guard restores coordination state after success and failure', async () => {

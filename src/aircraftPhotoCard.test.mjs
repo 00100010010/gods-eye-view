@@ -38,7 +38,14 @@ function installFakeDom() {
     'aircraft-photo-title',
     'aircraft-photo-meta',
     'aircraft-photo-credit',
-    'aircraft-photo-close',
+    'aircraft-contact-route',
+    'aircraft-contact-destination',
+    'aircraft-contact-operator',
+    'aircraft-contact-altitude',
+    'aircraft-contact-speed',
+    'aircraft-contact-heading',
+    'aircraft-contact-source',
+    'aircraft-contact-status',
   ];
   const elements = new Map(ids.map((id) => [id, new FakeElement()]));
   const fakeWindow = new FakeTarget();
@@ -63,12 +70,19 @@ test('aircraft photo card ignores an older lookup and clears with the selected a
 
   const select = (id, label) => fakeWindow.dispatchEvent({
     type: 'gev:awareness-subject-selected',
-    detail: { layerId: 'flights', id, label, aircraftType: 'Boeing 737-800' },
+    detail: {
+      layerId: 'flights',
+      id,
+      label,
+      aircraftType: 'Boeing 737-800',
+      context: { route: 'CDG → JFK', destination: 'JFK', source: 'OpenSky Network' },
+    },
   });
   select('abcdef', 'OLD123');
   select('123456', 'NEW456');
   assert.equal(requests.length, 2);
   assert.equal(elements.get('aircraft-photo-title').textContent, 'NEW456');
+  assert.equal(elements.get('aircraft-contact-destination').textContent, 'JFK');
 
   requests[0].resolve({
     ok: true,
@@ -96,9 +110,37 @@ test('aircraft photo card ignores an older lookup and clears with the selected a
   assert.equal(elements.get('aircraft-photo-credit').textContent, '© New Photographer · Planespotters.net ↗');
 
   fakeWindow.dispatchEvent({
+    type: 'gev:tracked-subject-context-updated',
+    detail: {
+      layerId: 'flights',
+      id: '123456',
+      label: 'NEW456',
+      context: { route: 'CDG → LAX', destination: 'LAX', status: 'live' },
+    },
+  });
+  assert.equal(elements.get('aircraft-contact-route').textContent, 'CDG → LAX');
+  assert.equal(elements.get('aircraft-contact-destination').textContent, 'LAX');
+
+  fakeWindow.dispatchEvent({
     type: 'gev:awareness-subject-cleared',
     detail: { layerId: 'flights', id: '123456', reason: 'deliberate' },
   });
   assert.equal(elements.get('aircraft-photo-card').hidden, true);
+
+  fakeWindow.dispatchEvent({
+    type: 'gev:awareness-subject-selected',
+    detail: {
+      layerId: 'military',
+      id: 'ae1234',
+      label: 'UNKNOWN',
+      aircraftType: 'TR-3B',
+      context: { destination: '', status: 'live', source: 'adsb.lol' },
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requests.length, 2, 'a non-photographiable aircraft does not call the photo API');
+  assert.equal(elements.get('aircraft-photo-card').hidden, false, 'aircraft context remains visible without a photo');
+  assert.equal(elements.get('aircraft-photo-status').textContent, 'AIRCRAFT PHOTO UNAVAILABLE');
+  assert.equal(elements.get('aircraft-contact-destination').textContent, '—');
   card.destroy();
 });

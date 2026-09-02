@@ -32,15 +32,12 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   assert.doesNotMatch(viewSwitcher[0], /id="reset-globe-view"/, 'map-only reset must stay outside Cockpit');
   assert.match(
     viewSwitcher[0],
-    /id="cockpit-reset-globe"[^>]*type="button"[^>]*aria-label="Reset cockpit to full globe view"[^>]*hidden[\s\S]*?public[\s\S]*?RESET[\s\S]*?id="map-view-switch"/,
+    /id="cockpit-entry"[^>]*type="button"[^>]*hidden[\s\S]*?flight[\s\S]*?COCKPIT[\s\S]*?id="cockpit-reset-globe"[^>]*type="button"[^>]*aria-label="Reset cockpit to full globe view"[^>]*hidden[\s\S]*?public[\s\S]*?RESET[\s\S]*?id="map-view-switch"/,
   );
 
   const actions = html.match(/<div class="global-context-actions"[\s\S]*?<\/div>/);
   assert.ok(actions, 'Contact Context actions are missing');
-  assert.ok(
-    actions[0].indexOf('id="cockpit-entry"') < actions[0].indexOf('id="installations-search-btn"'),
-    'Cockpit must precede Search Nearby Sites',
-  );
+  assert.doesNotMatch(actions[0], /id="cockpit-entry"/, 'Cockpit must not require Contacts');
   assert.match(
     css,
     /body\.cockpit-mode #view-switcher \{[\s\S]*?bottom: max\(clamp\(128px, 15vh, 150px\), env\(safe-area-inset-bottom\)\);[\s\S]*?margin-bottom: -95px;/,
@@ -191,22 +188,21 @@ test('share startup isolates panel defaults from recipient-local collapse prefer
   );
 });
 
-test('Cockpit owns a focused shared Display portal and compact Radio controls', () => {
+test('Cockpit owns a focused Display portal without a decorative HUD', () => {
   const hiddenRule = css.match(/body\.cockpit-mode :is\(([^)]*)\)\s*\{\s*display:\s*none\s*!important;/);
   assert.ok(hiddenRule, 'Cockpit hidden-chrome rule is missing');
   assert.match(css, /body\.cockpit-mode #right-context-rail\s*\{\s*display:\s*none\s*!important;/);
   assert.match(html, /id="cockpit-display-toggle-btn"[^>]*aria-controls="cockpit-display-panel"/);
   assert.match(html, /id="cockpit-display-toggle-btn"[^>]*>◀<\/button>/);
   assert.match(html, /data-cockpit-launcher="display"[\s\S]*?id="cockpit-display-toggle-btn"/);
-  assert.match(html, /data-cockpit-display-slot="hud"/);
   assert.match(html, /data-cockpit-display-slot="detection"[\s\S]*?data-cockpit-display-slot="parameters"[\s\S]*?data-cockpit-display-slot="models3d"/);
+  assert.doesNotMatch(html, /data-cockpit-display-slot="hud"|id="hud-toggle"|id="hud-layout-select"|id="intel-hud"/);
   assert.doesNotMatch(html, /data-cockpit-display-slot="presets"/);
   assert.match(html, /id="clear-selected-layers"[^>]*aria-label="Turn off all selected data layers"/);
   assert.match(html, /id="reset-globe-view"[^>]*aria-label="Reset to full globe view"/);
   assert.match(css, /#top-center-actions\s*\{[\s\S]*?left:\s*50%;[\s\S]*?display:\s*flex;[\s\S]*?transform:\s*translateX\(-50%\)/);
   assert.match(css, /body\.ui-clean-view #top-center-actions/);
   assert.match(css, /body\.recording-mode #top-center-actions/);
-  assert.equal((html.match(/id="hud-toggle"/g) || []).length, 1, 'HUD control must have one stateful DOM owner');
   assert.equal((html.match(/id="detection-toggle"/g) || []).length, 1, 'Detection control must have one stateful DOM owner');
   assert.equal((html.match(/id="models3d-toggle"/g) || []).length, 1, '3D control must have one stateful DOM owner');
   assert.doesNotMatch(html, /id="cockpit-(?:hud|detection|models3d)-toggle"/);
@@ -351,13 +347,13 @@ test('fresh Cockpit entry temporarily collapses map panels and exit restores the
   assert.ok(entryPanels, 'Cockpit entry panel list is missing');
   for (const panelId of [
     'data-panel',
-    'cctv-panel',
     'pp-toggles',
     'global-context-panel',
     'radio-panel',
   ]) {
     assert.match(entryPanels[1], new RegExp(`'${panelId}'`), `${panelId} must collapse on entry`);
   }
+  assert.doesNotMatch(entryPanels[1], /'cctv-panel'/, 'CCTV no longer owns a separate panel');
 
   const callback = ui.match(/onEntered: \(\) => \{([\s\S]*?)\n      \},\n      onExited:/);
   assert.ok(callback, 'Cockpit onEntered callback is missing');
@@ -515,26 +511,10 @@ test('Cockpit panel corridors reserve the owned topline readouts', () => {
   );
   assert.match(
     signalLayout[1],
-    /resolveCockpitUtilityAnchor\(\{[\s\S]*?recBottom: recBounds \? recBounds\.bottom : 0,[\s\S]*?signalTop: signalBounds\.top,[\s\S]*?stripHeight: utilityBounds\.height,/,
-    'the strip hangs off the REC readout and is clamped by the briefing card it shares the margin with',
+    /resolveCockpitUtilityAnchor\(\{[\s\S]*?recBottom: 0,[\s\S]*?signalTop: signalBounds\.top,[\s\S]*?stripHeight: utilityBounds\.height,/,
+    'the strip is clamped by the briefing card without depending on a retired HUD readout',
   );
-  assert.match(signalLayout[1], /#intel-hud \.hud-top-right/);
-  assert.match(
-    signalLayout[1],
-    /const recBounds = isRenderedOnScreen\(recReadout\) \? recReadout\.getBoundingClientRect\(\) : null;/,
-    'HUD Off retires the Intel HUD with visibility/opacity, which leaves the REC '
-      + 'readout a rect — a rect test alone would anchor the strip to an invisible readout',
-  );
-  assert.match(
-    ui,
-    /function isRenderedOnScreen\(element\) \{[\s\S]*?style\.display === 'none' \|\| style\.visibility === 'hidden' \|\| Number\(style\.opacity\) === 0[\s\S]*?rect\.width > 0 && rect\.height > 0;/,
-  );
-  assert.match(
-    ui,
-    /_leftStackHudTransitionHandler = \(event\) => \{[\s\S]*?_scheduleLeftPanelLayout\(\{ reconsiderAutoCollapse: true \}\);[\s\S]*?this\.cockpitView\?\.scheduleContextLayout\(\);/,
-    'the strip must remeasure on the same HUD fade the accordion does — the REC '
-      + 'readout keeps its rect until the transition ends',
-  );
+  assert.doesNotMatch(signalLayout[1], /#intel-hud|recReadout|recBounds/);
   assert.doesNotMatch(
     signalLayout[1],
     /Math\.max\(120,/,
@@ -550,7 +530,7 @@ test('Cockpit panel corridors reserve the owned topline readouts', () => {
   assert.match(css, /body\.cockpit-mode #left-panel-stack\s*\{[\s\S]*?transition:\s*none;/);
 });
 
-test('an expanded Cockpit left panel stays above Contact, HUD, and attribution', () => {
+test('an expanded Cockpit left panel stays above Contact and attribution', () => {
   assert.doesNotMatch(
     ui,
     /COCKPIT_PASSABLE_LEFT_OBSTACLE_SELECTOR|cockpitOverlaysPassable/,
@@ -570,13 +550,9 @@ test('an expanded Cockpit left panel stays above Contact, HUD, and attribution',
     /safeBottom = resolveLeftStackBottomBoundary\(\{[\s\S]*?safeGap,\s*\n\s*\}\);/,
   );
   const cockpitHud = css.match(/#cockpit-hud\s*\{[\s\S]*?z-index:\s*(\d+);/);
-  const cockpitIntelHud = css.match(
-    /body\.cockpit-mode #intel-hud\.active\s*\{[\s\S]*?z-index:\s*(\d+);/,
-  );
   const leftStack = css.match(/body\.cockpit-mode #left-panel-stack\s*\{[\s\S]*?z-index:\s*(\d+);/);
-  assert.ok(cockpitHud && cockpitIntelHud && leftStack);
+  assert.ok(cockpitHud && leftStack);
   assert.ok(Number(leftStack[1]) > Number(cockpitHud[1]));
-  assert.ok(Number(leftStack[1]) > Number(cockpitIntelHud[1]));
   // Long layer lists scroll inside the panel instead of being clipped away.
   assert.match(
     css,
@@ -602,11 +578,12 @@ test('Cockpit side rulers stay behind interactive panel surfaces', () => {
   assert.ok(Number(utilities[1]) > Number(sideRuler[1]));
 });
 
-test('Cockpit Display portals shared HUD, Detection, Parameters, and 3D controls', () => {
+test('Cockpit Display portals Detection, Parameters, and 3D controls', () => {
   assert.match(
     ui,
-    /_initCockpitDisplayPortal\(\) \{[\s\S]*?\['hud', this\._hudBtn\?\.closest[\s\S]*?\['detection', this\._detectionBtn\?\.closest[\s\S]*?\['parameters', this\._sliderPanel\][\s\S]*?\['models3d', this\._models3dBtn\?\.closest/,
+    /_initCockpitDisplayPortal\(\) \{[\s\S]*?\['detection', this\._detectionBtn\?\.closest[\s\S]*?\['parameters', this\._sliderPanel\][\s\S]*?\['models3d', this\._models3dBtn\?\.closest/,
   );
+  assert.doesNotMatch(ui, /\['hud', this\._hudBtn/);
   assert.doesNotMatch(ui, /\['presets',/);
   assert.match(
     ui,
@@ -640,7 +617,6 @@ test('mobile Cockpit prioritizes flight instruments and collision-safe controls'
   );
   assert.ok(mobileCockpit, 'mobile Cockpit rules are missing');
   assert.match(mobileCockpit[1], /body\.cockpit-mode #left-panel-stack,[\s\S]*?display:\s*none\s*!important;/);
-  assert.match(mobileCockpit[1], /body\.cockpit-mode #intel-hud/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-context-window/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-signal-window/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-utility-controls[\s\S]*?bottom:\s*152px;/);
