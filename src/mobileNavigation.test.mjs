@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { reconcileExclusiveMobilePanels } from './mobileNavigation.js';
 
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
@@ -42,6 +43,30 @@ test('mobile panels are transient one-at-a-time sheets with four exit paths', ()
   assert.match(mobile, /if \(distance > 72\) collapsePanel\(panel\.id\)/);
   assert.match(css, /height: min\(64dvh, 34rem\) !important/);
   assert.match(css, /bottom: max\(calc\(2vh \+ 7\.5rem\), calc\(env\(safe-area-inset-bottom\) \+ 7\.5rem\)\) !important/);
+});
+
+test('an externally opened Contacts sheet replaces an already open Display sheet', () => {
+  const panel = (id, collapsed) => ({
+    id,
+    classList: {
+      collapsed,
+      contains(name) { return name === 'collapsed' && this.collapsed; },
+    },
+  });
+  const display = panel('pp-toggles', false);
+  const contacts = panel('global-context-panel', false);
+  const collapsed = [];
+  const owner = reconcileExclusiveMobilePanels({
+    panels: [display, contacts],
+    records: [{ target: contacts }],
+    collapse(id) {
+      collapsed.push(id);
+      if (id === display.id) display.classList.collapsed = true;
+    },
+  });
+
+  assert.equal(owner, contacts);
+  assert.deepEqual(collapsed, ['pp-toggles']);
 });
 
 test('mobile Location is an accessible autocomplete sheet sized for touch', () => {

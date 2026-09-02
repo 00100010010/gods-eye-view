@@ -7,6 +7,35 @@ const MOBILE_PANEL_IDS = Object.freeze([
 ]);
 
 /**
+ * Enforce the one-sheet mobile contract even when a panel is expanded by an
+ * application event rather than by the mobile navigation itself. The most
+ * recently expanded mutation owns the sheet; any older open panel is closed.
+ *
+ * @param {object} input
+ * @param {HTMLElement[]} input.panels
+ * @param {MutationRecord[]} [input.records]
+ * @param {(id: string) => void} input.collapse
+ * @returns {HTMLElement|null}
+ */
+export function reconcileExclusiveMobilePanels({ panels, records = [], collapse }) {
+  const panelSet = new Set(panels);
+  let owner = null;
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const target = records[index]?.target;
+    if (panelSet.has(target) && !target.classList.contains('collapsed')) {
+      owner = target;
+      break;
+    }
+  }
+  owner ||= panels.find((panel) => !panel.classList.contains('collapsed')) || null;
+  if (!owner) return null;
+  for (const panel of panels) {
+    if (panel !== owner && !panel.classList.contains('collapsed')) collapse(panel.id);
+  }
+  return owner;
+}
+
+/**
  * Mobile-only map navigation. Desktop panel state remains authoritative: all
  * mobile opens are transient and never overwrite a person's saved layout.
  */
@@ -167,7 +196,10 @@ export function initMobileNavigation({ styleManager, documentRef = document } = 
     });
   }
 
-  const observer = new MutationObserver(sync);
+  const observer = new MutationObserver((records) => {
+    if (isMobile()) reconcileExclusiveMobilePanels({ panels, records, collapse: collapsePanel });
+    sync();
+  });
   for (const panel of panels) observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
   const onMediaChange = () => {
     if (!isMobile()) {

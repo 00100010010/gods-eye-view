@@ -161,7 +161,36 @@ try {
       );
       await page.click('#control-panel .dock-tray-close');
       await page.waitForFunction(() => document.querySelector('#control-panel')?.classList.contains('collapsed'));
-      commandDockActions = { locationClose, mapSourcesClose, geolocationCentered: true };
+
+      // A contact can open from a map/entity event rather than from the mobile
+      // navigation. That path must still replace an already-open Display sheet
+      // instead of stacking two fixed panels on top of one another.
+      await page.click('#mobile-more-toggle');
+      await page.click('#mobile-more-menu [data-mobile-panel="pp-toggles"]');
+      await page.waitForFunction(() => !document.querySelector('#pp-toggles')?.classList.contains('collapsed'));
+      await page.evaluate(() => window.__godsEyeView?.styleManager?.setPanelCollapsed?.(
+        'global-context-panel',
+        false,
+        { explicit: true, persist: false, syncShare: false },
+      ));
+      await page.waitForFunction(() => (
+        document.querySelector('#pp-toggles')?.classList.contains('collapsed')
+        && !document.querySelector('#global-context-panel')?.classList.contains('collapsed')
+      ));
+      const exclusiveSheets = await page.evaluate(() => [
+        'location-bar',
+        'data-panel',
+        'global-context-panel',
+        'control-panel',
+        'pp-toggles',
+      ].filter((id) => !document.getElementById(id)?.classList.contains('collapsed')));
+      await page.click('#mobile-sheet-backdrop');
+      commandDockActions = {
+        locationClose,
+        mapSourcesClose,
+        geolocationCentered: true,
+        exclusiveSheets,
+      };
     }
 
     const layout = await page.evaluate(() => {
@@ -265,10 +294,18 @@ try {
     if (layout.railCollision) failures.push('panel-rail collision');
     if (layout.smallControls.length) failures.push(`${layout.smallControls.length} touch target(s) below 40px`);
     if (layout.commandDockActions) {
-      const { locationClose, mapSourcesClose, geolocationCentered } = layout.commandDockActions;
+      const {
+        locationClose,
+        mapSourcesClose,
+        geolocationCentered,
+        exclusiveSheets,
+      } = layout.commandDockActions;
       if (!geolocationCentered) failures.push('device geolocation did not center the map');
       if (locationClose.width < 40 || locationClose.height < 40) failures.push('LOCATION close target below 40px');
       if (mapSourcesClose.width < 40 || mapSourcesClose.height < 40) failures.push('MAP SOURCES close target below 40px');
+      if (exclusiveSheets.length !== 1 || exclusiveSheets[0] !== 'global-context-panel') {
+        failures.push(`Display/Contacts sheet overlap: ${exclusiveSheets.join(', ') || 'none'}`);
+      }
     }
     if (layout.expandedPanel) {
       const panel = layout.expandedPanel;
